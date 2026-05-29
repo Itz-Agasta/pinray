@@ -1,6 +1,18 @@
-[package]
-name = "pinray"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = [
+    "crates/pinray-core",
+    "crates/pinray-platform-linux",
+    "crates/pinray-platform-macos",
+    "crates/pinray-platform-windows",
+    "crates/pinray",
+]
+resolver = "3"
 
-[dependencies]
+[workspace.package]
+edition = "2024"
+license = "MIT"
+version = "0.1.0"
+
+[workspace.dependencies]
+thiserror = "2.0"
+tracing = "0.1"

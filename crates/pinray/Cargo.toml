@@ -1,0 +1,12 @@
+[package]
+name = "pinray"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pinray-core = { path = "../pinray-core" }
+pinray-platform-linux = { path = "../pinray-platform-linux" }
+pinray-platform-macos = { path = "../pinray-platform-macos" }
+pinray-platform-windows = { path = "../pinray-platform-windows" }
+tracing.workspace = true
