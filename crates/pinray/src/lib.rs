@@ -94,6 +94,11 @@ impl SessionBuilder {
         self
     }
 
+    pub fn restore_token(mut self, restore_token: impl Into<String>) -> Self {
+        self.inner = self.inner.restore_token(restore_token);
+        self
+    }
+
     pub fn color_space(mut self, color_space: Option<ColorSpace>) -> Self {
         self.inner = self.inner.color_space(color_space);
         self

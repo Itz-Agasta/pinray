@@ -83,10 +83,11 @@ impl CaptureSession {
         match (self.video_backend.as_mut(), self.audio_backend.as_mut()) {
             (Some(video), None) => video.next_event(timeout),
             (None, Some(audio)) => audio.next_audio(timeout).map(CaptureEvent::Audio),
-            (Some(_), Some(_)) => Err(PinrayError::Unsupported(
-                "phase 0 session scaffolding does not multiplex simultaneous video and audio events yet"
-                    .into(),
-            )),
+            (Some(video), Some(audio)) => match video.next_event(timeout) {
+                Ok(event) => Ok(event),
+                Err(PinrayError::Timeout(_)) => audio.next_audio(timeout).map(CaptureEvent::Audio),
+                Err(error) => Err(error),
+            },
             (None, None) => Err(PinrayError::BackendNotSelected),
         }
     }
@@ -134,6 +135,11 @@ impl SessionBuilder {
 
     pub fn pixel_format(mut self, pixel_format: PixelFormat) -> Self {
         self.config.pixel_format = pixel_format;
+        self
+    }
+
+    pub fn restore_token(mut self, restore_token: impl Into<String>) -> Self {
+        self.config.restore_token = Some(restore_token.into());
         self
     }
 
