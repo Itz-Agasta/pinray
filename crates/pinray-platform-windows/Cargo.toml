@@ -1,0 +1,9 @@
+[package]
+name = "pinray-platform-windows"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pinray-core = { path = "../pinray-core" }
+tracing.workspace = true
