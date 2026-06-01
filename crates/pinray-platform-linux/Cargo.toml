@@ -1,0 +1,12 @@
+[package]
+name = "pinray-platform-linux"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pinray-core = { path = "../pinray-core" }
+pipewire = "0.10.0"
+serde = { version = "1.0", features = ["derive"] }
+tracing.workspace = true
+zbus = { version = "5.15", default-features = true }
