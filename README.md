@@ -69,4 +69,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## License
 
-Licensed under either of [MIT](LICENSE) or Apache License, Version 2.0 at your option.
+Licensed under the [MIT License](LICENSE). For any inquiries, contact: rupamgolui@proton.me
