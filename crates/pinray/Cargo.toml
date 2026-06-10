@@ -10,3 +10,6 @@ pinray-platform-linux = { path = "../pinray-platform-linux" }
 pinray-platform-macos = { path = "../pinray-platform-macos" }
 pinray-platform-windows = { path = "../pinray-platform-windows" }
 tracing.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
