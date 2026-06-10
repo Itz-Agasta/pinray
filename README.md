@@ -5,7 +5,6 @@
 [![Crates.io](https://img.shields.io/crates/v/pinray.svg)](https://crates.io/crates/pinray)
 [![Documentation](https://docs.rs/pinray/badge.svg)](https://docs.rs/pinray)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/yourusername/pinray/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/pinray/actions)
 
 Raw screen and audio capture with a clean backend trait boundary. Capture first, encode separately.
 
