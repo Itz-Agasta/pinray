@@ -12,8 +12,9 @@ resolver = "3"
 description = "Multi-platform screen capture library for Rust"
 edition = "2024"
 license = "MIT"
+readme = "README.md"
 repository = "https://github.com/Itz-Agasta/pinray"
-version = "0.1.0"
+version = "0.1.1"
 
 [workspace.dependencies]
 thiserror = "2.0"
