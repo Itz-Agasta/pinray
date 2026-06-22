@@ -21,14 +21,17 @@ struct PlatformResolver;
 
 impl BackendResolver for PlatformResolver {
     fn resolve(&self, config: &SessionConfig) -> Result<BackendBundle> {
+        #[cfg(target_os = "linux")]
         if let Some(bundle) = pinray_platform_linux::try_resolve(config)? {
             return Ok(bundle);
         }
 
+        #[cfg(target_os = "macos")]
         if let Some(bundle) = pinray_platform_macos::try_resolve(config)? {
             return Ok(bundle);
         }
 
+        #[cfg(target_os = "windows")]
         if let Some(bundle) = pinray_platform_windows::try_resolve(config)? {
             return Ok(bundle);
         }
@@ -136,23 +139,29 @@ impl SessionBuilder {
 
 pub fn available_backends() -> Vec<BackendInfo> {
     let mut backends = Vec::new();
+    #[cfg(target_os = "linux")]
     backends.extend(pinray_platform_linux::available_backends());
+    #[cfg(target_os = "macos")]
     backends.extend(pinray_platform_macos::available_backends());
+    #[cfg(target_os = "windows")]
     backends.extend(pinray_platform_windows::available_backends());
     backends
 }
 
 pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     let mut sources = Vec::new();
+    #[cfg(target_os = "linux")]
     sources.extend(pinray_platform_linux::enumerate_sources()?);
+    #[cfg(target_os = "macos")]
     sources.extend(pinray_platform_macos::enumerate_sources()?);
+    #[cfg(target_os = "windows")]
     sources.extend(pinray_platform_windows::enumerate_sources()?);
     Ok(sources)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CaptureSession, available_backends};
+    use super::{available_backends, CaptureSession};
 
     #[test]
     fn facade_exposes_current_platform_backends() {

@@ -5,10 +5,15 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-pinray-core = { path = "../pinray-core" }
-pinray-platform-linux = { path = "../pinray-platform-linux" }
-pinray-platform-macos = { path = "../pinray-platform-macos" }
-pinray-platform-windows = { path = "../pinray-platform-windows" }
+pinray-core = { path = "../core", version = "0.1" }
+[target.'cfg(target_os = "linux")'.dependencies]
+pinray-platform-linux = { path = "../platform-linux", version = "0.1" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+pinray-platform-macos = { path = "../platform-macos", version = "0.1" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+pinray-platform-windows = { path = "../platform-windows", version = "0.1" }
 tracing.workspace = true
 
 [dev-dependencies]

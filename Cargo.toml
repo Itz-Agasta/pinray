@@ -1,9 +1,9 @@
 [workspace]
 members = [
-    "crates/pinray-core",
-    "crates/pinray-platform-linux",
-    "crates/pinray-platform-macos",
-    "crates/pinray-platform-windows",
+    "crates/core",
+    "crates/platform-linux",
+    "crates/platform-macos",
+    "crates/platform-windows",
     "crates/pinray",
 ]
 resolver = "3"
