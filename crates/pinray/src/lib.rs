@@ -161,7 +161,7 @@ pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{available_backends, CaptureSession};
+    use super::{CaptureSession, available_backends};
 
     #[test]
     fn facade_exposes_current_platform_backends() {
