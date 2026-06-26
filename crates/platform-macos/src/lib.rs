@@ -1,5 +1,12 @@
+#[cfg(target_os = "macos")]
+mod capture;
+#[cfg(target_os = "macos")]
+mod content;
+#[cfg(target_os = "macos")]
+mod permissions;
+
 use pinray_core::{
-    BackendBundle, BackendInfo, BackendKind, BackendPreference, CaptureSource, PinrayError, Result,
+    BackendBundle, BackendInfo, BackendKind, BackendPreference, CaptureSource, Result,
     SessionConfig,
 };
 
@@ -8,8 +15,8 @@ pub fn available_backends() -> Vec<BackendInfo> {
         vec![BackendInfo {
             kind: BackendKind::MacScreenCaptureKit,
             supports_audio: true,
-            zero_copy: true,
-            notes: "ScreenCaptureKit backend not implemented yet",
+            zero_copy: false,
+            notes: "ScreenCaptureKit (macOS 12.3+): display/window capture with optional system audio",
         }]
     } else {
         Vec::new()
@@ -17,7 +24,18 @@ pub fn available_backends() -> Vec<BackendInfo> {
 }
 
 pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
-    Ok(Vec::new())
+    if !cfg!(target_os = "macos") {
+        return Ok(Vec::new());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        permissions::ensure_screen_capture_permission()?;
+        content::enumerate_sources()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    unreachable!()
 }
 
 pub fn try_resolve(config: &SessionConfig) -> Result<Option<BackendBundle>> {
@@ -29,13 +47,16 @@ pub fn try_resolve(config: &SessionConfig) -> Result<Option<BackendBundle>> {
         config.backend_preference,
         BackendPreference::Auto | BackendPreference::MacScreenCaptureKit
     );
-
     if !applies {
         return Ok(None);
     }
 
-    Err(PinrayError::BackendUnavailable(
-        "macOS backend scaffolding exists, but ScreenCaptureKit will work on implementation later"
-            .into(),
-    ))
+    #[cfg(target_os = "macos")]
+    {
+        permissions::ensure_screen_capture_permission()?;
+        capture::build_backend(config).map(Some)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    unreachable!()
 }
