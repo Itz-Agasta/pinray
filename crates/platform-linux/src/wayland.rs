@@ -360,11 +360,11 @@ fn run_video_loop(
         SpaTypes::ObjectParamMeta,
         ParamType::Meta,
         Property::new(
-            pw::spa::sys::SPA_PARAM_META_type as u32,
-            Value::Id(Id(pw::spa::sys::SPA_META_Header as u32))
+            pw::spa::sys::SPA_PARAM_META_type,
+            Value::Id(Id(pw::spa::sys::SPA_META_Header))
         ),
         Property::new(
-            pw::spa::sys::SPA_PARAM_META_size as u32,
+            pw::spa::sys::SPA_PARAM_META_size,
             Value::Int(size_of::<pw::spa::sys::spa_meta_header>() as i32)
         ),
     );
