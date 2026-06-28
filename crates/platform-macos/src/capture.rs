@@ -12,7 +12,8 @@ use std::{
 use block2::RcBlock;
 use dispatch2::{DispatchQueueAttr, DispatchRetained};
 use objc2::{
-    AllocAnyThread, DefinedClass, define_class, msg_send, rc::Retained, runtime::ProtocolObject,
+    AllocAnyThread, DefinedClass, Message, define_class, msg_send, rc::Retained,
+    runtime::ProtocolObject,
 };
 use objc2_core_media::{CMSampleBuffer, CMTimeFlags};
 use objc2_core_video::{
@@ -126,7 +127,7 @@ define_class!(
     unsafe impl SCStreamDelegate for SckDelegate {
         #[unsafe(method(stream:didStopWithError:))]
         fn stream_did_stop_with_error(&self, _stream: &SCStream, error: &NSError) {
-            let desc = unsafe { error.localizedDescription() };
+            let desc = error.localizedDescription();
             tracing::error!(%desc, "SCStream stopped unexpectedly");
             self.ivars().errored.store(true, Ordering::Release);
         }
@@ -267,7 +268,7 @@ pub fn build_backend(config: &SessionConfig) -> Result<BackendBundle> {
     );
     let delegate = SckDelegate::new(Arc::clone(&errored));
 
-    let delegate_obj = ProtocolObject::<dyn SCStreamDelegate>::from_ref(delegate.as_ref());
+    let delegate_obj = ProtocolObject::<dyn SCStreamDelegate>::from_ref::<SckDelegate>(&*delegate);
 
     let stream = unsafe {
         SCStream::initWithFilter_configuration_delegate(
@@ -280,7 +281,7 @@ pub fn build_backend(config: &SessionConfig) -> Result<BackendBundle> {
 
     let queue = dispatch2::DispatchQueue::new("dev.pinray.sck_output", DispatchQueueAttr::SERIAL);
 
-    let output_obj = ProtocolObject::<dyn SCStreamOutput>::from_ref(output.as_ref());
+    let output_obj = ProtocolObject::<dyn SCStreamOutput>::from_ref::<SckOutput>(&*output);
 
     // addStreamOutput returns Result<(), Retained<NSError>>
     unsafe {
@@ -345,7 +346,7 @@ fn build_content_filter(
     match &config.video_target {
         None | Some(VideoCaptureTarget::Display(_)) => {
             let display = find_display(content, config)?;
-            let excluded = unsafe { objc2_foundation::NSArray::<SCWindow>::new() };
+            let excluded = objc2_foundation::NSArray::<SCWindow>::new();
             Ok(unsafe {
                 SCContentFilter::initWithDisplay_excludingWindows(
                     SCContentFilter::alloc(),
@@ -518,15 +519,15 @@ fn extract_video_frame(
     unsafe { CVPixelBufferLockBaseAddress(&pixel_buffer, CVPixelBufferLockFlags::ReadOnly) };
 
     let result = (|| {
-        let w = unsafe { CVPixelBufferGetWidth(&pixel_buffer) } as u32;
-        let h = unsafe { CVPixelBufferGetHeight(&pixel_buffer) } as u32;
+        let w = CVPixelBufferGetWidth(&pixel_buffer) as u32;
+        let h = CVPixelBufferGetHeight(&pixel_buffer) as u32;
         if w == 0 || h == 0 {
             return None;
         }
-        let bpr = unsafe { CVPixelBufferGetBytesPerRow(&pixel_buffer) } as u32;
-        let base = unsafe { CVPixelBufferGetBaseAddress(&pixel_buffer) };
-        let size = unsafe { CVPixelBufferGetDataSize(&pixel_buffer) };
-        let native = unsafe { CVPixelBufferGetPixelFormatType(&pixel_buffer) };
+        let bpr = CVPixelBufferGetBytesPerRow(&pixel_buffer) as u32;
+        let base = CVPixelBufferGetBaseAddress(&pixel_buffer);
+        let size = CVPixelBufferGetDataSize(&pixel_buffer);
+        let native = CVPixelBufferGetPixelFormatType(&pixel_buffer);
         if base.is_null() || size == 0 {
             return None;
         }
