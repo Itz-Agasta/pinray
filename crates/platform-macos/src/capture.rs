@@ -452,12 +452,12 @@ fn build_stream_configuration(
     }
 
     if let Some(crop) = config.crop_rect {
-        let cg_rect = objc2_core_graphics::CGRect {
-            origin: objc2_core_graphics::CGPoint {
+        let cg_rect = objc2_core_foundation::CGRect {
+            origin: objc2_core_foundation::CGPoint {
                 x: crop.x as f64,
                 y: crop.y as f64,
             },
-            size: objc2_core_graphics::CGSize {
+            size: objc2_core_foundation::CGSize {
                 width: crop.width as f64,
                 height: crop.height as f64,
             },
