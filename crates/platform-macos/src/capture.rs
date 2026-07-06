@@ -40,13 +40,18 @@ use crate::content::get_shareable_content;
 enum RawEvent {
     Video(VideoFrame),
     Audio(AudioFrame),
+    /// Stream stopped on its own (error or system action); carries the message.
+    Ended(String),
 }
 
 //  SCStreamOutput delegate
 struct OutputIvars {
     event_tx: mpsc::SyncSender<RawEvent>,
     active: Arc<AtomicBool>,
-    sequence: Arc<AtomicU64>,
+    // Separate per-stream counters, advanced only when a frame is actually
+    // delivered, so consumers can detect drops per stream.
+    video_sequence: AtomicU64,
+    audio_sequence: AtomicU64,
     desired_pixel_format: PixelFormat,
     capture_audio: bool,
 }
@@ -71,19 +76,25 @@ define_class!(
             if !ivars.active.load(Ordering::Acquire) {
                 return;
             }
-            let seq = ivars.sequence.fetch_add(1, Ordering::Relaxed);
 
+            // This callback runs on one serial GCD queue, so the
+            // load-then-store on the sequence counters is race-free.
             match output_type {
                 SCStreamOutputType::Screen => {
+                    let seq = ivars.video_sequence.load(Ordering::Relaxed);
                     if let Some(frame) =
                         extract_video_frame(sample_buffer, seq, ivars.desired_pixel_format)
+                        && ivars.event_tx.try_send(RawEvent::Video(frame)).is_ok()
                     {
-                        let _ = ivars.event_tx.try_send(RawEvent::Video(frame));
+                        ivars.video_sequence.store(seq + 1, Ordering::Relaxed);
                     }
                 }
                 SCStreamOutputType::Audio if ivars.capture_audio => {
-                    if let Some(frame) = extract_audio_frame(sample_buffer, seq) {
-                        let _ = ivars.event_tx.try_send(RawEvent::Audio(frame));
+                    let seq = ivars.audio_sequence.load(Ordering::Relaxed);
+                    if let Some(frame) = extract_audio_frame(sample_buffer, seq)
+                        && ivars.event_tx.try_send(RawEvent::Audio(frame)).is_ok()
+                    {
+                        ivars.audio_sequence.store(seq + 1, Ordering::Relaxed);
                     }
                 }
                 _ => {}
@@ -96,14 +107,14 @@ impl SckOutput {
     fn new(
         event_tx: mpsc::SyncSender<RawEvent>,
         active: Arc<AtomicBool>,
-        sequence: Arc<AtomicU64>,
         desired_pixel_format: PixelFormat,
         capture_audio: bool,
     ) -> Retained<Self> {
         let this = Self::alloc().set_ivars(OutputIvars {
             event_tx,
             active,
-            sequence,
+            video_sequence: AtomicU64::new(0),
+            audio_sequence: AtomicU64::new(0),
             desired_pixel_format,
             capture_audio,
         });
@@ -114,6 +125,7 @@ impl SckOutput {
 //  SCStreamDelegate
 struct DelegateIvars {
     errored: Arc<AtomicBool>,
+    event_tx: mpsc::SyncSender<RawEvent>,
 }
 
 define_class!(
@@ -130,13 +142,20 @@ define_class!(
             let desc = error.localizedDescription();
             tracing::error!(%desc, "SCStream stopped unexpectedly");
             self.ivars().errored.store(true, Ordering::Release);
+            // Wake a caller blocked in next_event(None). If the channel is
+            // full the receiver is not blocked and the errored flag catches
+            // it on the next call instead.
+            let _ = self
+                .ivars()
+                .event_tx
+                .try_send(RawEvent::Ended(desc.to_string()));
         }
     }
 );
 
 impl SckDelegate {
-    fn new(errored: Arc<AtomicBool>) -> Retained<Self> {
-        let this = Self::alloc().set_ivars(DelegateIvars { errored });
+    fn new(errored: Arc<AtomicBool>, event_tx: mpsc::SyncSender<RawEvent>) -> Retained<Self> {
+        let this = Self::alloc().set_ivars(DelegateIvars { errored, event_tx });
         unsafe { msg_send![super(this), init] }
     }
 }
@@ -179,14 +198,19 @@ impl VideoBackend for MacVideoBackend {
             cv2.notify_one();
         });
 
+        // Set active before starting so frames delivered between the
+        // completion handler firing and our return are not discarded.
+        self.active.store(true, Ordering::Release);
         unsafe { self.stream.startCaptureWithCompletionHandler(Some(&block)) };
 
         let mut guard = cv
             .wait_while(result.lock().unwrap(), |v| v.is_none())
             .unwrap();
-        guard.take().unwrap()?;
+        if let Err(error) = guard.take().unwrap() {
+            self.active.store(false, Ordering::Release);
+            return Err(error);
+        }
 
-        self.active.store(true, Ordering::Release);
         tracing::debug!("SCStream started");
         Ok(())
     }
@@ -237,17 +261,28 @@ impl VideoBackend for MacVideoBackend {
                 .recv()
                 .map_err(|_| PinrayError::Platform("SCStream event channel disconnected".into()))?,
         };
-        Ok(match raw {
-            RawEvent::Video(f) => CaptureEvent::Video(f),
-            RawEvent::Audio(f) => CaptureEvent::Audio(f),
-        })
+        match raw {
+            RawEvent::Video(f) => Ok(CaptureEvent::Video(f)),
+            RawEvent::Audio(f) => Ok(CaptureEvent::Audio(f)),
+            RawEvent::Ended(msg) => Err(PinrayError::Platform(format!(
+                "SCStream stopped with error: {msg}"
+            ))),
+        }
     }
 }
 
 // ─── public constructor ───────────────────────────────────────────────────────
 
 pub fn build_backend(config: &SessionConfig) -> Result<BackendBundle> {
-    let supports_audio = config.audio_capture.is_some();
+    let supports_audio = match &config.audio_capture {
+        None => false,
+        Some(pinray_core::AudioCapture::SystemMix) => true,
+        Some(pinray_core::AudioCapture::Microphone(_)) => {
+            return Err(PinrayError::Unsupported(
+                "macos microphone capture is not implemented yet".into(),
+            ));
+        }
+    };
     let content = get_shareable_content()?;
 
     let filter = build_content_filter(&content, config)?;
@@ -257,16 +292,14 @@ pub fn build_backend(config: &SessionConfig) -> Result<BackendBundle> {
 
     let active = Arc::new(AtomicBool::new(false));
     let errored = Arc::new(AtomicBool::new(false));
-    let sequence = Arc::new(AtomicU64::new(0));
 
     let output = SckOutput::new(
-        event_tx,
+        event_tx.clone(),
         Arc::clone(&active),
-        Arc::clone(&sequence),
         config.pixel_format,
         supports_audio,
     );
-    let delegate = SckDelegate::new(Arc::clone(&errored));
+    let delegate = SckDelegate::new(Arc::clone(&errored), event_tx);
 
     let delegate_obj = ProtocolObject::<dyn SCStreamDelegate>::from_ref::<SckDelegate>(&*delegate);
 
@@ -424,11 +457,10 @@ fn build_stream_configuration(
         cfg.setHeight(out_h as usize);
     }
 
-    let cv_fmt = match config.pixel_format {
-        PixelFormat::Rgba8888 => kCVPixelFormatType_32RGBA,
-        _ => kCVPixelFormatType_32BGRA,
-    };
-    unsafe { cfg.setPixelFormat(cv_fmt) };
+    // SCKit only accepts BGRA (plus l10r/420v/420f/...); RGBA is not a valid
+    // stream format. Always capture BGRA — normalize_pixels swizzles to RGBA
+    // when the caller asked for it.
+    unsafe { cfg.setPixelFormat(kCVPixelFormatType_32BGRA) };
 
     unsafe { cfg.setShowsCursor(matches!(config.cursor_mode, CursorMode::Embedded)) };
 
@@ -498,11 +530,10 @@ fn display_dimensions(content: &SCShareableContent, config: &SessionConfig) -> (
 // ─── frame extraction ─────────────────────────────────────────────────────────
 
 fn pts_to_ns(pts: objc2_core_media::CMTime) -> i64 {
+    // Widen to i128: SCKit uses host-clock timescales (1e9), so
+    // value * 1e9 overflows i64 within seconds of uptime.
     if pts.timescale != 0 {
-        pts.value
-            .saturating_mul(1_000_000_000)
-            .checked_div(pts.timescale as i64)
-            .unwrap_or(0)
+        (pts.value as i128 * 1_000_000_000 / pts.timescale as i128) as i64
     } else {
         0
     }
@@ -539,7 +570,8 @@ fn extract_video_frame(
             sequence,
             width: w,
             height: h,
-            stride: bpr,
+            // copy_rows strips CVPixelBuffer row padding, so rows are packed.
+            stride: w * 4,
             pixel_format,
             color_space: Some(ColorSpace::Srgb),
             data: FrameData::Host(data),

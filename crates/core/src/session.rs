@@ -83,11 +83,23 @@ impl CaptureSession {
         match (self.video_backend.as_mut(), self.audio_backend.as_mut()) {
             (Some(video), None) => video.next_event(timeout),
             (None, Some(audio)) => audio.next_audio(timeout).map(CaptureEvent::Audio),
-            (Some(video), Some(audio)) => match video.next_event(timeout) {
-                Ok(event) => Ok(event),
-                Err(PinrayError::Timeout(_)) => audio.next_audio(timeout).map(CaptureEvent::Audio),
-                Err(error) => Err(error),
-            },
+            (Some(video), Some(audio)) => {
+                // Drain pending audio first (non-blocking); otherwise a busy
+                // video stream would starve audio, since audio is only polled
+                // after a video timeout.
+                match audio.next_audio(Some(Duration::ZERO)) {
+                    Ok(frame) => return Ok(CaptureEvent::Audio(frame)),
+                    Err(PinrayError::Timeout(_)) => {}
+                    Err(error) => return Err(error),
+                }
+                match video.next_event(timeout) {
+                    Ok(event) => Ok(event),
+                    Err(PinrayError::Timeout(_)) => {
+                        audio.next_audio(timeout).map(CaptureEvent::Audio)
+                    }
+                    Err(error) => Err(error),
+                }
+            }
             (None, None) => Err(PinrayError::BackendNotSelected),
         }
     }
@@ -181,7 +193,17 @@ impl SessionBuilder {
 
 #[cfg(test)]
 mod tests {
-    use super::SessionBuilder;
+    use std::collections::VecDeque;
+    use std::time::Duration;
+
+    use super::{CaptureSession, SessionBuilder};
+    use crate::{
+        audio::{AudioData, AudioFrame, SampleFormat},
+        backend::{AudioBackend, BackendBundle, BackendInfo, BackendKind, VideoBackend},
+        config::SessionConfig,
+        error::{PinrayError, Result},
+        frame::{CaptureEvent, FrameData, PixelFormat, VideoFrame},
+    };
 
     #[test]
     fn builder_requires_video_or_audio() {
@@ -193,5 +215,94 @@ mod tests {
     fn queue_depth_must_be_positive() {
         let config = SessionBuilder::new().queue_depth(0).config().clone();
         assert!(config.validate().is_err());
+    }
+
+    fn mock_info() -> BackendInfo {
+        BackendInfo {
+            kind: BackendKind::LinuxWaylandPortal,
+            supports_audio: true,
+            zero_copy: false,
+            notes: "mock",
+        }
+    }
+
+    /// Video backend that always has a frame ready.
+    struct BusyVideo;
+
+    impl VideoBackend for BusyVideo {
+        fn info(&self) -> BackendInfo {
+            mock_info()
+        }
+        fn start(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn stop(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn next_event(&mut self, _timeout: Option<Duration>) -> Result<CaptureEvent> {
+            Ok(CaptureEvent::Video(VideoFrame {
+                stream_time_ns: 0,
+                sequence: 0,
+                width: 1,
+                height: 1,
+                stride: 4,
+                pixel_format: PixelFormat::Bgra8888,
+                color_space: None,
+                data: FrameData::Host(vec![0; 4]),
+                damage: None,
+            }))
+        }
+    }
+
+    struct QueuedAudio(VecDeque<AudioFrame>);
+
+    impl AudioBackend for QueuedAudio {
+        fn info(&self) -> BackendInfo {
+            mock_info()
+        }
+        fn start(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn stop(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn next_audio(&mut self, timeout: Option<Duration>) -> Result<AudioFrame> {
+            self.0
+                .pop_front()
+                .ok_or(PinrayError::Timeout(timeout.unwrap_or_default()))
+        }
+    }
+
+    #[test]
+    fn busy_video_does_not_starve_audio() {
+        let audio_frame = AudioFrame {
+            stream_time_ns: 0,
+            sequence: 0,
+            sample_rate: 48_000,
+            channels: 2,
+            sample_format: SampleFormat::F32,
+            data: AudioData::Interleaved(vec![0; 8]),
+        };
+        let bundle = BackendBundle {
+            info: mock_info(),
+            video: Some(Box::new(BusyVideo)),
+            audio: Some(Box::new(QueuedAudio(VecDeque::from([
+                audio_frame.clone(),
+                audio_frame,
+            ])))),
+        };
+        let mut session = CaptureSession::new(SessionConfig::default(), bundle);
+
+        let mut audio_events = 0;
+        let mut video_events = 0;
+        for _ in 0..6 {
+            match session.next_event(Some(Duration::from_millis(1))).unwrap() {
+                CaptureEvent::Audio(_) => audio_events += 1,
+                CaptureEvent::Video(_) => video_events += 1,
+                other => panic!("unexpected event: {other:?}"),
+            }
+        }
+        assert_eq!(audio_events, 2, "queued audio must be drained");
+        assert_eq!(video_events, 4);
     }
 }

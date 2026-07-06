@@ -16,9 +16,11 @@ pub enum BackendPreference {
 pub enum BackendKind {
     LinuxWaylandPortal,
     LinuxX11,
+    LinuxPipeWireAudio,
     MacScreenCaptureKit,
     WindowsDxgi,
     WindowsWgc,
+    WindowsWasapi,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
