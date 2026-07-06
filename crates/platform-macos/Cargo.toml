@@ -5,6 +5,15 @@ edition.workspace = true
 license.workspace = true
 description.workspace = true
 repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+# Build docs for the real macOS implementation (objc2 crates compile for
+# darwin targets from the linux docs.rs builder).
+[package.metadata.docs.rs]
+default-target = "aarch64-apple-darwin"
+targets = ["aarch64-apple-darwin"]
 
 [dependencies]
 pinray-core = { path = "../core", version = "0.1" }
