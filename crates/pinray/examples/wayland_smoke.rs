@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use pinray::{
-    BackendPreference, CaptureEvent, CaptureSession, PixelFormat, SourceId, VideoCaptureTarget,
+    AudioCapture, BackendPreference, CaptureEvent, CaptureSession, PixelFormat, SourceId,
+    VideoCaptureTarget,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -12,12 +13,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    println!("[1] building session...");
+    println!("[1] building session (video + system audio)...");
     let mut session = CaptureSession::builder()
         .backend_preference(BackendPreference::LinuxWaylandPortal)
         .video_target(VideoCaptureTarget::Display(SourceId::new(
             "portal-default-display",
         )))
+        .audio(AudioCapture::SystemMix)
         .pixel_format(PixelFormat::Bgra8888)
         .build()?;
 
@@ -26,12 +28,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     session.start()?;
     println!("[4] session started, entering capture loop...");
 
-    for idx in 0..5 {
-        println!("[5] waiting for event #{idx}...");
+    let mut videos = 0u32;
+    let mut audios = 0u32;
+    for idx in 0..15 {
         match session.next_event(Some(Duration::from_secs(10)))? {
             CaptureEvent::Video(frame) => {
+                videos += 1;
                 println!(
-                    "[6] frame #{idx}: {}x{} stride={} format={:?} bytes={}",
+                    "[5] video #{idx}: {}x{} stride={} format={:?} bytes={}",
                     frame.width,
                     frame.height,
                     frame.stride,
@@ -42,12 +46,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 );
             }
-            other => println!("[6] event #{idx}: {:?}", other),
+            CaptureEvent::Audio(frame) => {
+                audios += 1;
+                println!(
+                    "[5] audio #{idx}: rate={} ch={} fmt={:?} bytes={}",
+                    frame.sample_rate,
+                    frame.channels,
+                    frame.sample_format,
+                    match frame.data {
+                        pinray::AudioData::Interleaved(ref bytes) => bytes.len(),
+                        pinray::AudioData::Planar(ref planes) =>
+                            planes.iter().map(Vec::len).sum(),
+                    }
+                );
+            }
+            other => println!("[5] event #{idx}: {:?}", other),
         }
     }
 
-    println!("[7] stopping session...");
+    println!("[6] draining audio explicitly...");
+    for idx in 0..3 {
+        match session.next_audio(Some(Duration::from_secs(2))) {
+            Ok(frame) => {
+                audios += 1;
+                println!("[7] audio #{idx}: rate={} ch={}", frame.sample_rate, frame.channels);
+            }
+            Err(pinray::PinrayError::Timeout(_)) => println!("[7] audio #{idx}: timeout (system silent?)"),
+            Err(error) => return Err(error.into()),
+        }
+    }
+
+    println!("[8] stopping session...");
     session.stop()?;
-    println!("[8] done.");
+    assert!(videos > 0, "expected at least one video frame");
+    println!("[9] done. videos={videos} audios={audios}. smoke test passed.");
     Ok(())
 }
