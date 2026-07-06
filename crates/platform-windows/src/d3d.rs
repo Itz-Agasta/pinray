@@ -63,6 +63,25 @@ pub(crate) fn qpc_to_ns(qpc: i64, freq: i64) -> i64 {
     (qpc as i128 * 1_000_000_000 / freq as i128) as i64
 }
 
+#[cfg(test)]
+mod tests {
+    use super::qpc_to_ns;
+
+    #[test]
+    fn qpc_to_ns_survives_large_uptimes() {
+        // 10 MHz QPC frequency (common on modern Windows), 30 days uptime.
+        let freq = 10_000_000i64;
+        let qpc = 30 * 24 * 3600 * freq;
+        assert_eq!(qpc_to_ns(qpc, freq), 30 * 24 * 3600 * 1_000_000_000i64);
+    }
+
+    #[test]
+    fn qpc_to_ns_sub_second_precision() {
+        // 1 tick at 10 MHz = 100 ns.
+        assert_eq!(qpc_to_ns(1, 10_000_000), 100);
+    }
+}
+
 pub(crate) struct HostCopy {
     pub data: Vec<u8>,
     pub width: u32,

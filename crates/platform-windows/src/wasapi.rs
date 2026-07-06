@@ -197,6 +197,60 @@ fn capture_loop(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base_format(tag: u32, bits: u16) -> WAVEFORMATEX {
+        WAVEFORMATEX {
+            wFormatTag: tag as u16,
+            nChannels: 2,
+            nSamplesPerSec: 48_000,
+            nAvgBytesPerSec: 48_000 * 2 * (bits as u32 / 8),
+            nBlockAlign: 2 * (bits / 8),
+            wBitsPerSample: bits,
+            cbSize: 0,
+        }
+    }
+
+    #[test]
+    fn parses_ieee_float_mix_format() {
+        let mix = parse_mix_format(&base_format(WAVE_FORMAT_IEEE_FLOAT, 32)).unwrap();
+        assert_eq!(mix.sample_format, SampleFormat::F32);
+        assert_eq!(mix.sample_rate, 48_000);
+        assert_eq!(mix.channels, 2);
+        assert_eq!(mix.block_align, 8);
+    }
+
+    #[test]
+    fn parses_pcm_16bit() {
+        let mix = parse_mix_format(&base_format(WAVE_FORMAT_PCM, 16)).unwrap();
+        assert_eq!(mix.sample_format, SampleFormat::I16);
+    }
+
+    #[test]
+    fn rejects_odd_pcm_depth() {
+        assert!(parse_mix_format(&base_format(WAVE_FORMAT_PCM, 24)).is_err());
+    }
+
+    #[test]
+    fn parses_extensible_float() {
+        let mut base = base_format(WAVE_FORMAT_EXTENSIBLE, 32);
+        base.cbSize = 22;
+        let ext = WAVEFORMATEXTENSIBLE {
+            Format: base,
+            SubFormat: KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
+            ..Default::default()
+        };
+        // The struct is packed(1), so go through a raw pointer instead of a
+        // field reference — this mirrors how the real GetMixFormat buffer is
+        // read.
+        let fmt = &ext as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX;
+        let mix = parse_mix_format(unsafe { &*fmt }).unwrap();
+        assert_eq!(mix.sample_format, SampleFormat::F32);
+    }
+}
+
 pub(crate) struct WasapiAudioBackend {
     worker: Option<(JoinHandle<()>, Arc<AtomicBool>)>,
     rx: Option<Receiver<AudioFrame>>,
