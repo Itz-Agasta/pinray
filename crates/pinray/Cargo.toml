@@ -6,9 +6,20 @@ license.workspace = true
 description.workspace = true
 readme.workspace = true
 repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+# The public API is entirely re-exported from pinray-core and identical on
+# every target; docs are built for a target whose platform deps are pure
+# Rust, because the linux docs.rs builder lacks system libpipewire.
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+targets = ["x86_64-pc-windows-msvc"]
 
 [dependencies]
 pinray-core = { path = "../core", version = "0.1" }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 pinray-platform-linux = { path = "../platform-linux", version = "0.1" }
 
@@ -17,7 +28,6 @@ pinray-platform-macos = { path = "../platform-macos", version = "0.1" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 pinray-platform-windows = { path = "../platform-windows", version = "0.1" }
-tracing.workspace = true
 
 [dev-dependencies]
 tracing-subscriber.workspace = true
