@@ -1,8 +1,10 @@
 <div align="center">
 
+
+
 # pinray
 
-**Cross-platform screen and audio capture for Rust - raw frames, real metadata, native backends.**
+**Cross-platform screen and audio capture for Rust — raw frames, real metadata, native backends.**
 
 [![Crates.io](https://img.shields.io/crates/v/pinray.svg)](https://crates.io/crates/pinray)
 [![Documentation](https://docs.rs/pinray/badge.svg)](https://docs.rs/pinray)
@@ -10,7 +12,15 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.88-orange.svg)](#minimum-supported-rust-version)
 
-[Getting started](docs/getting-started.md) · [Platform support](docs/platforms.md) · [Troubleshooting](docs/troubleshooting.md) · [API docs](https://docs.rs/pinray)
+[Getting Started](docs/getting-started.md) •
+[Platform Support](docs/platforms.md) •
+[Troubleshooting](docs/troubleshooting.md) •
+[API Docs](https://docs.rs/pinray)
+
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/d4d1a711-5e24-4ae1-81cb-47c64231caf5" alt="pinray banner" width="100%">
+</p>
 
 </div>
 
@@ -97,11 +107,11 @@ Cargo workspace: [`pinray-core`](crates/core) defines the frame model and backen
 
 ## Stability
 
-pinray is `0.x` and moving fast: minor versions may break the API while the frame model and builder settle against real-world use. Pin a minor version if you need stability.
+pinray is `0.2` and moving fast: minor versions may break the API while the frame model and builder settle against real-world use. Pin a minor version if you need stability.
 
 ## Minimum supported Rust version
 
-Rust **1.88** (let-chains). MSRV bumps are minor-version changes during 0.x.
+Rust **1.88** (let-chains). MSRV bumps are minor-version changes during 0.2.
 
 ## Contributing
 
