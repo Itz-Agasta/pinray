@@ -1,3 +1,4 @@
+mod audio;
 mod portal;
 mod wayland;
 
@@ -14,6 +15,12 @@ pub fn available_backends() -> Vec<BackendInfo> {
                 supports_audio: false,
                 zero_copy: false,
                 notes: "Wayland portal + PipeWire video backend",
+            },
+            BackendInfo {
+                kind: BackendKind::LinuxPipeWireAudio,
+                supports_audio: true,
+                zero_copy: false,
+                notes: "PipeWire system-mix capture via default sink monitor",
             },
             BackendInfo {
                 kind: BackendKind::LinuxX11,
@@ -48,6 +55,12 @@ pub fn try_resolve(config: &SessionConfig) -> Result<Option<BackendBundle>> {
     }
 
     if wayland::is_wayland_session() {
+        return wayland::resolve_wayland_backend(config).map(Some);
+    }
+
+    // PipeWire audio does not depend on the session type; audio-only
+    // sessions work on X11 too.
+    if config.video_target.is_none() && config.audio_capture.is_some() {
         return wayland::resolve_wayland_backend(config).map(Some);
     }
 

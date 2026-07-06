@@ -23,11 +23,12 @@ use pipewire::{
 };
 
 use pinray_core::{
-    BackendBundle, BackendInfo, BackendKind, CaptureEvent, ColorSpace, CursorMode, FrameData::Host,
-    PinrayError, PixelFormat, Result, SessionConfig, VideoBackend, VideoFrame,
+    AudioBackend, AudioCapture, BackendBundle, BackendInfo, BackendKind, CaptureEvent, ColorSpace,
+    CursorMode, FrameData::Host, PinrayError, PixelFormat, Result, SessionConfig, VideoBackend,
+    VideoFrame,
 };
 
-use crate::portal::PortalClient;
+use crate::{audio::PipeWireAudioBackend, portal::PortalClient};
 
 /// Returns `true` if the current session is a Wayland session.
 ///
@@ -39,26 +40,44 @@ pub fn is_wayland_session() -> bool {
         || std::env::var_os("WAYLAND_DISPLAY").is_some()
 }
 
-/// Resolves the Wayland video backend for the given session configuration.
+/// Resolves the Wayland video and/or PipeWire audio backends for the given
+/// session configuration.
 ///
-/// Returns `Unsupported` if audio capture is requested (not yet implemented).
-/// The caller should use `BackendPreference::LinuxX11` as a fallback for audio.
+/// System audio is captured natively from the default sink monitor and does
+/// not need a portal round-trip, so audio-only sessions skip the portal
+/// dialog entirely.
 pub fn resolve_wayland_backend(config: &SessionConfig) -> Result<BackendBundle> {
-    if config.audio_capture.is_some() {
-        // TODO: implement PipeWire system-audio capture against the stable
-        // registry APIs. Keep this explicit instead of introducing a shell-based fallback.
-        return Err(PinrayError::Unsupported(
-            "linux wayland audio capture is not implemented yet; we have video capture only".into(),
-        ));
-    }
+    let audio: Option<Box<dyn AudioBackend>> = match &config.audio_capture {
+        None => None,
+        Some(AudioCapture::SystemMix) => Some(Box::new(PipeWireAudioBackend::new()?)),
+        Some(AudioCapture::Microphone(_)) => {
+            return Err(PinrayError::Unsupported(
+                "linux microphone capture is not implemented yet".into(),
+            ));
+        }
+    };
 
-    let backend = WaylandVideoBackend::new(config.clone())?;
-    let info = backend.info();
-    Ok(BackendBundle {
-        info,
-        video: Some(Box::new(backend)),
-        audio: None,
-    })
+    let video: Option<Box<dyn VideoBackend>> = if config.video_target.is_some() {
+        Some(Box::new(WaylandVideoBackend::new(config.clone())?))
+    } else {
+        None
+    };
+
+    let info = match (&video, &audio) {
+        (Some(video), _) => {
+            let mut info = video.info();
+            info.supports_audio = audio.is_some();
+            info
+        }
+        (None, Some(audio)) => audio.info(),
+        (None, None) => {
+            return Err(PinrayError::InvalidConfig(
+                "at least one of video_target or audio_capture must be set".into(),
+            ));
+        }
+    };
+
+    Ok(BackendBundle { info, video, audio })
 }
 
 struct WaylandVideoBackend {
@@ -119,7 +138,7 @@ impl WaylandVideoBackend {
                 kind: BackendKind::LinuxWaylandPortal,
                 supports_audio: false,
                 zero_copy: false,
-                notes: "Wayland video via XDG Desktop Portal + PipeWire 0.9",
+                notes: "Wayland video via XDG Desktop Portal + PipeWire",
             },
             control_tx,
             event_rx,
@@ -504,7 +523,16 @@ fn normalize_frame(
     desired_format: PixelFormat,
 ) -> (PixelFormat, Vec<u8>) {
     match (source_format, desired_format) {
-        (VideoFormat::BGRx, PixelFormat::Bgra8888) => (PixelFormat::Bgra8888, raw.to_vec()),
+        (VideoFormat::BGRA | VideoFormat::BGRx, PixelFormat::Bgra8888) => {
+            (PixelFormat::Bgra8888, raw.to_vec())
+        }
+        (VideoFormat::BGRA, PixelFormat::Rgba8888) => {
+            let mut data = raw.to_vec();
+            for pixel in data.chunks_exact_mut(4) {
+                pixel.swap(0, 2);
+            }
+            (PixelFormat::Rgba8888, data)
+        }
         (VideoFormat::RGBx, PixelFormat::Rgba8888) => (PixelFormat::Rgba8888, raw.to_vec()),
         (VideoFormat::RGBA, PixelFormat::Rgba8888) => (PixelFormat::Rgba8888, raw.to_vec()),
         (VideoFormat::RGB, PixelFormat::Rgb888) => (PixelFormat::Rgb888, raw.to_vec()),
