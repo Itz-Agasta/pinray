@@ -4,24 +4,31 @@ use crate::{
     source::SourceId,
 };
 
+/// Whether the pointer is drawn into captured frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CursorMode {
     Embedded,
     Hidden,
 }
 
+/// What to capture video from; ids come from source enumeration or
+/// `SourceId::new("auto")` for the primary display.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VideoCaptureTarget {
     Display(SourceId),
     Window(SourceId),
 }
 
+/// What to capture audio from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AudioCapture {
+    /// Everything the system plays (loopback / sink monitor).
     SystemMix,
+    /// A microphone device (not implemented by any backend yet).
     Microphone(SourceId),
 }
 
+/// Validated session configuration; construct through the session builder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionConfig {
     pub backend_preference: crate::backend::BackendPreference,

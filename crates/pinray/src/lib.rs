@@ -1,3 +1,49 @@
+//! Cross-platform screen and audio capture with raw frames and real metadata.
+//!
+//! pinray captures displays, windows, and system audio through each OS's
+//! native API — Wayland portals + PipeWire and X11 on Linux,
+//! ScreenCaptureKit on macOS, DXGI/Windows Graphics Capture + WASAPI on
+//! Windows — and hands you raw [`VideoFrame`]s and [`AudioFrame`]s with
+//! stride, pixel format, timestamps, and sequence numbers intact. Encoding
+//! is deliberately out of scope: feed frames to ffmpeg, WebRTC, wgpu, or
+//! your own pipeline.
+//!
+//! # Quick start
+//!
+//! ```no_run
+//! use std::time::Duration;
+//! use pinray::{AudioCapture, CaptureEvent, CaptureSession, SourceId, VideoCaptureTarget};
+//!
+//! # fn main() -> Result<(), pinray::PinrayError> {
+//! let mut session = CaptureSession::builder()
+//!     .video_target(VideoCaptureTarget::Display(SourceId::new("auto")))
+//!     .audio(AudioCapture::SystemMix)
+//!     .build()?;
+//!
+//! session.start()?;
+//! match session.next_event(Some(Duration::from_secs(5)))? {
+//!     CaptureEvent::Video(frame) => println!("{}x{}", frame.width, frame.height),
+//!     CaptureEvent::Audio(frame) => println!("{} Hz", frame.sample_rate),
+//!     other => println!("{other:?}"),
+//! }
+//! session.stop()?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Core concepts
+//!
+//! - [`CaptureSession`] — builder-configured lifecycle (`start` / `next_event`
+//!   / `stop`); [`enumerate_sources`] lists displays, windows, and audio
+//!   devices up front.
+//! - [`CaptureEvent`] — one of [`VideoFrame`], [`AudioFrame`], a [`GapEvent`]
+//!   (dropped frames / backend restart), or `End`.
+//! - [`BackendPreference`] — `Auto` picks the right backend per platform;
+//!   [`CaptureSession::backend_info`] reports what was actually selected.
+//!
+//! Platform requirements, permissions, and per-backend limitations are
+//! documented in the repository's `docs/` folder.
+
 use pinray_core::{BackendBundle, BackendResolver, Result, SessionConfig};
 
 pub use pinray_core::{
@@ -8,10 +54,17 @@ pub use pinray_core::{
     VideoCaptureTarget, VideoFrame, WindowSource,
 };
 
+/// A running or configured capture session bound to the platform backend
+/// selected at build time.
+///
+/// Create one with [`CaptureSession::builder`]. `start`/`stop` are
+/// idempotent and a session survives repeated restarts.
 pub struct CaptureSession {
     inner: pinray_core::CaptureSession,
 }
 
+/// Builder for [`CaptureSession`]; validates the configuration and resolves
+/// the platform backend on [`build`](SessionBuilder::build).
 #[derive(Debug, Clone, Default)]
 pub struct SessionBuilder {
     inner: pinray_core::SessionBuilder,
@@ -137,6 +190,8 @@ impl SessionBuilder {
     }
 }
 
+/// Lists the capture backends compiled in for the current platform, with
+/// their capabilities and caveats in [`BackendInfo::notes`].
 pub fn available_backends() -> Vec<BackendInfo> {
     let mut backends = Vec::new();
     #[cfg(target_os = "linux")]
@@ -148,6 +203,12 @@ pub fn available_backends() -> Vec<BackendInfo> {
     backends
 }
 
+/// Enumerates capturable displays, windows, and audio sources.
+///
+/// Source ids feed [`VideoCaptureTarget`]; `SourceId::new("auto")` selects
+/// the primary display without enumerating. On pure Wayland (no Xwayland)
+/// video sources cannot be listed — selection happens in the portal dialog
+/// instead. On macOS this triggers the screen-recording permission check.
 pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     let mut sources = Vec::new();
     #[cfg(target_os = "linux")]

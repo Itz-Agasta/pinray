@@ -5,9 +5,18 @@ edition.workspace = true
 license.workspace = true
 description.workspace = true
 repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+# Build docs for the real Windows implementation (the windows crate is pure
+# Rust and compiles on the linux docs.rs builder).
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+targets = ["x86_64-pc-windows-msvc"]
 
 [dependencies]
-pinray-core = { path = "../core", version = "0.1" }
+pinray-core = { path = "../core", version = "0.2" }
 tracing.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]

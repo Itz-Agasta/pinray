@@ -19,7 +19,9 @@ mod wasapi;
 #[cfg(target_os = "windows")]
 mod wgc;
 
-use pinray_core::{BackendBundle, BackendInfo, BackendPreference, CaptureSource, Result, SessionConfig};
+use pinray_core::{
+    BackendBundle, BackendInfo, BackendPreference, CaptureSource, Result, SessionConfig,
+};
 
 pub fn available_backends() -> Vec<BackendInfo> {
     #[cfg(target_os = "windows")]

@@ -38,7 +38,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 };
                 println!(
                     "[4] audio #{idx}: seq={} rate={} ch={} fmt={:?} bytes={}",
-                    frame.sequence, frame.sample_rate, frame.channels, frame.sample_format, byte_count,
+                    frame.sequence,
+                    frame.sample_rate,
+                    frame.channels,
+                    frame.sample_format,
+                    byte_count,
                 );
             }
             Err(pinray::PinrayError::Timeout(_)) => {

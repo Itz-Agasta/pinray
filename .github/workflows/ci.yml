@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+
+jobs:
+  linux:
+    name: Linux (build, test, Xvfb capture smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpipewire-0.3-dev clang xvfb
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets
+      - run: cargo test --workspace
+      # Real capture test against a virtual X server. No PipeWire daemon on
+      # runners, so audio is skipped via PINRAY_NO_AUDIO.
+      - name: X11 capture smoke (Xvfb)
+        run: xvfb-run -a -s "-screen 0 1280x800x24" env PINRAY_NO_AUDIO=1 cargo run --example x11_smoke
+
+  cross-check:
+    name: Cross-target checks from Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc, aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      # cargo check does not link, so the msvc/darwin targets validate the
+      # platform crates' API usage without needing those hosts.
+      - run: cargo check -p pinray-platform-windows --all-targets --target x86_64-pc-windows-msvc
+      - run: cargo check -p pinray --examples --target x86_64-pc-windows-msvc
+      - run: cargo check -p pinray-platform-macos --target aarch64-apple-darwin
+      - run: cargo check -p pinray --examples --target aarch64-apple-darwin
+
+  macos:
+    name: macOS (build, unit tests)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets
+      # Capture itself needs screen-recording permission (not grantable on
+      # runners); unit tests cover frame extraction and timestamp math.
+      - run: cargo test --workspace
+
+  windows:
+    name: Windows (build, unit tests)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets
+      # DXGI/WGC need an interactive desktop session; unit tests cover the
+      # WASAPI mix-format parser and QPC timestamp math.
+      - run: cargo test --workspace

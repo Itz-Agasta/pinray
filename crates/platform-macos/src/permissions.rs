@@ -6,21 +6,6 @@ unsafe extern "C" {
     fn CGRequestScreenCaptureAccess() -> bool;
 }
 
-/// Check whether the process already holds screen-recording permission.
-///
-/// Returns `Ok(())` if access is granted, or `Err(PinrayError::Platform)` if
-/// access is denied or the check fails.
-pub fn preflight_screen_capture() -> Result<()> {
-    let granted = unsafe { CGPreflightScreenCaptureAccess() };
-    if granted {
-        Ok(())
-    } else {
-        Err(PinrayError::Platform(
-            "screen recording permission not granted; call request_screen_capture() and prompt the user".into(),
-        ))
-    }
-}
-
 /// Trigger the system permission dialog and wait for the user's response.
 ///
 /// On macOS 10.15+, this may open the Privacy & Security System Preferences
