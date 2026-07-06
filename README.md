@@ -1,7 +1,5 @@
 <div align="center">
 
-
-
 # pinray
 
 **Cross-platform screen and audio capture for Rust — raw frames, real metadata, native backends.**
@@ -18,9 +16,8 @@
 [API Docs](https://docs.rs/pinray)
 
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/d4d1a711-5e24-4ae1-81cb-47c64231caf5" alt="pinray banner" width="100%">
-</p>
+<img width="1600" height="900" alt="pinray-banner" src="https://github.com/user-attachments/assets/763fcf60-1fa6-4e25-82d9-04c88563aca4" />
+
 
 </div>
 
