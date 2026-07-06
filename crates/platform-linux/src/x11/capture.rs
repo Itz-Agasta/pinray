@@ -140,8 +140,7 @@ impl X11VideoBackend {
             Some(rect) => {
                 let cx = rect.x.max(0) as u16;
                 let cy = rect.y.max(0) as u16;
-                if cx as u32 + rect.width > base_w as u32
-                    || cy as u32 + rect.height > base_h as u32
+                if cx as u32 + rect.width > base_w as u32 || cy as u32 + rect.height > base_h as u32
                 {
                     return Err(PinrayError::InvalidConfig(format!(
                         "crop_rect exceeds capture region {base_w}x{base_h}"

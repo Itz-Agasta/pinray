@@ -149,8 +149,9 @@ impl VideoBackend for DxgiVideoBackend {
                 continue;
             }
 
-            let resource =
-                resource.ok_or_else(|| PinrayError::Platform("AcquireNextFrame returned no resource".into()))?;
+            let resource = resource.ok_or_else(|| {
+                PinrayError::Platform("AcquireNextFrame returned no resource".into())
+            })?;
             let texture: ID3D11Texture2D = resource
                 .cast()
                 .map_err(|e| win_err("ID3D11Texture2D cast", e))?;

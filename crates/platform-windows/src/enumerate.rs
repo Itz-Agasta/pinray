@@ -9,7 +9,9 @@ use pinray_core::{
 };
 use windows::Win32::Foundation::{HWND, LPARAM};
 use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
-use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIAdapter, IDXGIFactory1, IDXGIOutput};
+use windows::Win32::Graphics::Dxgi::{
+    CreateDXGIFactory1, IDXGIAdapter, IDXGIFactory1, IDXGIOutput,
+};
 use windows::Win32::Graphics::Gdi::HMONITOR;
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
@@ -73,7 +75,9 @@ pub(crate) fn enumerate_displays() -> Result<Vec<DisplayEntry>> {
 
             let mut dpi_x = 96u32;
             let mut dpi_y = 96u32;
-            let _ = unsafe { GetDpiForMonitor(desc.Monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) };
+            let _ = unsafe {
+                GetDpiForMonitor(desc.Monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y)
+            };
 
             entries.push(DisplayEntry {
                 source: DisplaySource {
@@ -102,7 +106,10 @@ pub(crate) fn find_display(id: &SourceId) -> Result<DisplayEntry> {
     }
 
     if id.0 == "auto" {
-        let primary = entries.iter().position(|e| e.source.is_primary).unwrap_or(0);
+        let primary = entries
+            .iter()
+            .position(|e| e.source.is_primary)
+            .unwrap_or(0);
         return Ok(entries.swap_remove(primary));
     }
 
@@ -118,9 +125,7 @@ pub(crate) fn find_window(id: &SourceId) -> Result<HWND> {
         .0
         .strip_prefix("window:")
         .and_then(|v| v.parse::<isize>().ok())
-        .ok_or_else(|| {
-            PinrayError::InvalidConfig(format!("invalid window source id: {}", id.0))
-        })?;
+        .ok_or_else(|| PinrayError::InvalidConfig(format!("invalid window source id: {}", id.0)))?;
     Ok(HWND(raw as *mut core::ffi::c_void))
 }
 
@@ -149,7 +154,12 @@ fn process_image_name(hwnd: HWND) -> Option<String> {
     let mut buf = vec![0u16; 1024];
     let mut len = buf.len() as u32;
     let result = unsafe {
-        QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len)
+        QueryFullProcessImageNameW(
+            process,
+            PROCESS_NAME_WIN32,
+            PWSTR(buf.as_mut_ptr()),
+            &mut len,
+        )
     };
     let _ = unsafe { windows::Win32::Foundation::CloseHandle(process) };
     result.ok()?;

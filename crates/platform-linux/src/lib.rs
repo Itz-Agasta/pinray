@@ -21,11 +21,9 @@ mod wayland;
 #[cfg(target_os = "linux")]
 mod x11;
 
-use pinray_core::{BackendBundle, BackendInfo, CaptureSource, Result, SessionConfig};
 #[cfg(target_os = "linux")]
-use pinray_core::{
-    AudioDeviceSource, BackendKind, BackendPreference, PinrayError, SourceId,
-};
+use pinray_core::{AudioDeviceSource, BackendKind, BackendPreference, PinrayError, SourceId};
+use pinray_core::{BackendBundle, BackendInfo, CaptureSource, Result, SessionConfig};
 
 pub const SYSTEM_AUDIO_ID: &str = "audio:system-mix";
 

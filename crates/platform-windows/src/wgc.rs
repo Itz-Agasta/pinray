@@ -158,55 +158,58 @@ impl VideoBackend for WgcVideoBackend {
         let dropped = Arc::clone(&self.dropped);
 
         frame_pool
-            .FrameArrived(&TypedEventHandler::<
-                Direct3D11CaptureFramePool,
-                IInspectable,
-            >::new(move |pool, _| {
-                let Some(pool) = pool.as_ref() else {
-                    return Ok(());
-                };
-                let Ok(frame) = pool.TryGetNextFrame() else {
-                    return Ok(());
-                };
+            .FrameArrived(
+                &TypedEventHandler::<Direct3D11CaptureFramePool, IInspectable>::new(
+                    move |pool, _| {
+                        let Some(pool) = pool.as_ref() else {
+                            return Ok(());
+                        };
+                        let Ok(frame) = pool.TryGetNextFrame() else {
+                            return Ok(());
+                        };
 
-                let result = (|| -> Result<VideoFrame> {
-                    let time_ns = frame
-                        .SystemRelativeTime()
-                        .map_err(|e| win_err("SystemRelativeTime", e))?
-                        .Duration
-                        * 100;
-                    let surface = frame.Surface().map_err(|e| win_err("frame.Surface", e))?;
-                    let access: IDirect3DDxgiInterfaceAccess = surface
-                        .cast()
-                        .map_err(|e| win_err("IDirect3DDxgiInterfaceAccess cast", e))?;
-                    let texture: ID3D11Texture2D = unsafe { access.GetInterface() }
-                        .map_err(|e| win_err("GetInterface", e))?;
+                        let result = (|| -> Result<VideoFrame> {
+                            let time_ns = frame
+                                .SystemRelativeTime()
+                                .map_err(|e| win_err("SystemRelativeTime", e))?
+                                .Duration
+                                * 100;
+                            let surface =
+                                frame.Surface().map_err(|e| win_err("frame.Surface", e))?;
+                            let access: IDirect3DDxgiInterfaceAccess = surface
+                                .cast()
+                                .map_err(|e| win_err("IDirect3DDxgiInterfaceAccess cast", e))?;
+                            let texture: ID3D11Texture2D = unsafe { access.GetInterface() }
+                                .map_err(|e| win_err("GetInterface", e))?;
 
-                    let copy = texture_to_host(&device, &context, &texture, crop, pixel_format)?;
-                    Ok(VideoFrame {
-                        stream_time_ns: time_ns,
-                        sequence: sequence.fetch_add(1, Ordering::Relaxed),
-                        width: copy.width,
-                        height: copy.height,
-                        stride: copy.stride,
-                        pixel_format,
-                        color_space: None,
-                        data: FrameData::Host(copy.data),
-                        damage: None,
-                    })
-                })();
-                let _ = frame.Close();
+                            let copy =
+                                texture_to_host(&device, &context, &texture, crop, pixel_format)?;
+                            Ok(VideoFrame {
+                                stream_time_ns: time_ns,
+                                sequence: sequence.fetch_add(1, Ordering::Relaxed),
+                                width: copy.width,
+                                height: copy.height,
+                                stride: copy.stride,
+                                pixel_format,
+                                color_space: None,
+                                data: FrameData::Host(copy.data),
+                                damage: None,
+                            })
+                        })();
+                        let _ = frame.Close();
 
-                match result {
-                    Ok(video_frame) => {
-                        if tx.try_send(video_frame).is_err() {
-                            dropped.fetch_add(1, Ordering::Relaxed);
+                        match result {
+                            Ok(video_frame) => {
+                                if tx.try_send(video_frame).is_err() {
+                                    dropped.fetch_add(1, Ordering::Relaxed);
+                                }
+                            }
+                            Err(error) => warn!("wgc frame extraction failed: {error}"),
                         }
-                    }
-                    Err(error) => warn!("wgc frame extraction failed: {error}"),
-                }
-                Ok(())
-            }))
+                        Ok(())
+                    },
+                ),
+            )
             .map_err(|e| win_err("FrameArrived", e))?;
 
         let session = frame_pool

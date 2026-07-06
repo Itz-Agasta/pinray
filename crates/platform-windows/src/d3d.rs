@@ -3,7 +3,9 @@
 
 use pinray_core::{PinrayError, PixelFormat, Rect, Result};
 use windows::Win32::Foundation::HMODULE;
-use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE, D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN};
+use windows::Win32::Graphics::Direct3D::{
+    D3D_DRIVER_TYPE, D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN,
+};
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_BOX, D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAP_READ,
     D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
@@ -45,9 +47,10 @@ pub(crate) fn create_d3d_device(
         .map_err(|e| win_err("D3D11CreateDevice", e))?;
     }
 
-    let device = device.ok_or_else(|| PinrayError::Platform("D3D11CreateDevice returned no device".into()))?;
-    let context = unsafe { device.GetImmediateContext() }
-        .map_err(|e| win_err("GetImmediateContext", e))?;
+    let device = device
+        .ok_or_else(|| PinrayError::Platform("D3D11CreateDevice returned no device".into()))?;
+    let context =
+        unsafe { device.GetImmediateContext() }.map_err(|e| win_err("GetImmediateContext", e))?;
     Ok((device, context))
 }
 
@@ -61,25 +64,6 @@ pub(crate) fn qpc_frequency() -> Result<i64> {
 /// Converts a raw QPC counter value to nanoseconds since boot.
 pub(crate) fn qpc_to_ns(qpc: i64, freq: i64) -> i64 {
     (qpc as i128 * 1_000_000_000 / freq as i128) as i64
-}
-
-#[cfg(test)]
-mod tests {
-    use super::qpc_to_ns;
-
-    #[test]
-    fn qpc_to_ns_survives_large_uptimes() {
-        // 10 MHz QPC frequency (common on modern Windows), 30 days uptime.
-        let freq = 10_000_000i64;
-        let qpc = 30 * 24 * 3600 * freq;
-        assert_eq!(qpc_to_ns(qpc, freq), 30 * 24 * 3600 * 1_000_000_000i64);
-    }
-
-    #[test]
-    fn qpc_to_ns_sub_second_precision() {
-        // 1 tick at 10 MHz = 100 ns.
-        assert_eq!(qpc_to_ns(1, 10_000_000), 100);
-    }
 }
 
 pub(crate) struct HostCopy {
@@ -103,7 +87,12 @@ pub(crate) fn texture_to_host(
         source.GetDesc(&mut src_desc);
 
         let (x, y, width, height) = match crop {
-            Some(rect) => (rect.x.max(0) as u32, rect.y.max(0) as u32, rect.width, rect.height),
+            Some(rect) => (
+                rect.x.max(0) as u32,
+                rect.y.max(0) as u32,
+                rect.width,
+                rect.height,
+            ),
             None => (0, 0, src_desc.Width, src_desc.Height),
         };
         if x + width > src_desc.Width || y + height > src_desc.Height {
@@ -130,7 +119,9 @@ pub(crate) fn texture_to_host(
             device
                 .CreateTexture2D(&desc, None, Some(&mut staging))
                 .map_err(|e| win_err("CreateTexture2D(staging)", e))?;
-            staging.ok_or_else(|| PinrayError::Platform("CreateTexture2D returned no texture".into()))?
+            staging.ok_or_else(|| {
+                PinrayError::Platform("CreateTexture2D returned no texture".into())
+            })?
         };
 
         let region = D3D11_BOX {
@@ -158,17 +149,21 @@ pub(crate) fn texture_to_host(
 
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
         context
-            .Map(Some(&staging_resource), 0, D3D11_MAP_READ, 0, Some(&mut mapped))
+            .Map(
+                Some(&staging_resource),
+                0,
+                D3D11_MAP_READ,
+                0,
+                Some(&mut mapped),
+            )
             .map_err(|e| win_err("Map(staging)", e))?;
 
         let row_bytes = (width * 4) as usize;
         let mut data = vec![0u8; row_bytes * height as usize];
         let src_ptr = mapped.pData as *const u8;
         for row in 0..height as usize {
-            let src = std::slice::from_raw_parts(
-                src_ptr.add(row * mapped.RowPitch as usize),
-                row_bytes,
-            );
+            let src =
+                std::slice::from_raw_parts(src_ptr.add(row * mapped.RowPitch as usize), row_bytes);
             data[row * row_bytes..(row + 1) * row_bytes].copy_from_slice(src);
         }
         context.Unmap(Some(&staging_resource), 0);
@@ -185,5 +180,24 @@ pub(crate) fn texture_to_host(
             height,
             stride: width * 4,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::qpc_to_ns;
+
+    #[test]
+    fn qpc_to_ns_survives_large_uptimes() {
+        // 10 MHz QPC frequency (common on modern Windows), 30 days uptime.
+        let freq = 10_000_000i64;
+        let qpc = 30 * 24 * 3600 * freq;
+        assert_eq!(qpc_to_ns(qpc, freq), 30 * 24 * 3600 * 1_000_000_000i64);
+    }
+
+    #[test]
+    fn qpc_to_ns_sub_second_precision() {
+        // 1 tick at 10 MHz = 100 ns.
+        assert_eq!(qpc_to_ns(1, 10_000_000), 100);
     }
 }

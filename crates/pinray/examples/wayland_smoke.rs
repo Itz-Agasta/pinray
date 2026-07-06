@@ -55,8 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     frame.sample_format,
                     match frame.data {
                         pinray::AudioData::Interleaved(ref bytes) => bytes.len(),
-                        pinray::AudioData::Planar(ref planes) =>
-                            planes.iter().map(Vec::len).sum(),
+                        pinray::AudioData::Planar(ref planes) => planes.iter().map(Vec::len).sum(),
                     }
                 );
             }
@@ -69,9 +68,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match session.next_audio(Some(Duration::from_secs(2))) {
             Ok(frame) => {
                 audios += 1;
-                println!("[7] audio #{idx}: rate={} ch={}", frame.sample_rate, frame.channels);
+                println!(
+                    "[7] audio #{idx}: rate={} ch={}",
+                    frame.sample_rate, frame.channels
+                );
             }
-            Err(pinray::PinrayError::Timeout(_)) => println!("[7] audio #{idx}: timeout (system silent?)"),
+            Err(pinray::PinrayError::Timeout(_)) => {
+                println!("[7] audio #{idx}: timeout (system silent?)")
+            }
             Err(error) => return Err(error.into()),
         }
     }

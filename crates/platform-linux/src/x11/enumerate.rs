@@ -22,10 +22,7 @@ pub(super) struct MonitorEntry {
     pub height: u16,
 }
 
-pub(super) fn enumerate_monitors(
-    conn: &RustConnection,
-    root: Window,
-) -> Result<Vec<MonitorEntry>> {
+pub(super) fn enumerate_monitors(conn: &RustConnection, root: Window) -> Result<Vec<MonitorEntry>> {
     let monitors = conn
         .randr_get_monitors(root, true)
         .map_err(x11_error("randr_get_monitors"))?
@@ -112,10 +109,7 @@ pub(super) fn parse_window_id(id: &SourceId) -> Result<Window> {
         .ok_or_else(|| PinrayError::InvalidConfig(format!("invalid window source id: {}", id.0)))
 }
 
-pub(super) fn enumerate_windows(
-    conn: &RustConnection,
-    root: Window,
-) -> Result<Vec<WindowSource>> {
+pub(super) fn enumerate_windows(conn: &RustConnection, root: Window) -> Result<Vec<WindowSource>> {
     let client_list = intern(conn, "_NET_CLIENT_LIST")?;
     let net_wm_name = intern(conn, "_NET_WM_NAME")?;
     let utf8_string = intern(conn, "UTF8_STRING")?;
@@ -130,7 +124,14 @@ pub(super) fn enumerate_windows(
     for window in reply.value32().into_iter().flatten() {
         // Prefer the UTF-8 EWMH title, fall back to legacy WM_NAME.
         let title = read_string_property(conn, window, net_wm_name, utf8_string)
-            .or_else(|| read_string_property(conn, window, AtomEnum::WM_NAME.into(), AtomEnum::STRING.into()))
+            .or_else(|| {
+                read_string_property(
+                    conn,
+                    window,
+                    AtomEnum::WM_NAME.into(),
+                    AtomEnum::STRING.into(),
+                )
+            })
             .unwrap_or_default();
         if title.is_empty() {
             continue;

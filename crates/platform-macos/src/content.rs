@@ -8,6 +8,11 @@ use objc2_screen_capture_kit::SCShareableContent;
 use pinray_core::{CaptureSource, DisplaySource, PinrayError, Result, SourceId, WindowSource};
 
 /// Synchronously retrieve `SCShareableContent` by blocking on the async completion handler.
+// The completion handler runs on an SCKit-owned queue, so the slot does cross
+// threads; `Retained<SCShareableContent>` lacks Send/Sync markers but the
+// Mutex serializes all access and the value is only consumed after the
+// handler finishes.
+#[allow(clippy::arc_with_non_send_sync)]
 pub fn get_shareable_content() -> Result<Retained<SCShareableContent>> {
     let slot: Arc<Mutex<Option<Result<Retained<SCShareableContent>>>>> = Arc::new(Mutex::new(None));
     let cv = Arc::new(Condvar::new());

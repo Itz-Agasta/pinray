@@ -16,7 +16,7 @@ default-target = "x86_64-pc-windows-msvc"
 targets = ["x86_64-pc-windows-msvc"]
 
 [dependencies]
-pinray-core = { path = "../core", version = "0.1" }
+pinray-core = { path = "../core", version = "0.2" }
 tracing.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]

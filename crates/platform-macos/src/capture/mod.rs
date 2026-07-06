@@ -27,9 +27,7 @@ use block2::RcBlock;
 use dispatch2::{DispatchQueueAttr, DispatchRetained};
 use objc2::{AllocAnyThread, rc::Retained, runtime::ProtocolObject};
 use objc2_foundation::NSError;
-use objc2_screen_capture_kit::{
-    SCStream, SCStreamDelegate, SCStreamOutput, SCStreamOutputType,
-};
+use objc2_screen_capture_kit::{SCStream, SCStreamDelegate, SCStreamOutput, SCStreamOutputType};
 
 use pinray_core::{
     AudioCapture, BackendBundle, BackendInfo, BackendKind, CaptureEvent, PinrayError, Result,

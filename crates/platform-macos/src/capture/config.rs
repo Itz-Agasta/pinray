@@ -43,20 +43,20 @@ fn find_display(
 ) -> Result<Retained<SCDisplay>> {
     let displays = unsafe { content.displays() };
 
-    if let Some(VideoCaptureTarget::Display(source_id)) = &config.video_target {
-        if source_id.0 != "auto" {
-            let target_id: u32 = source_id.0.parse().map_err(|_| {
-                PinrayError::InvalidConfig(format!("invalid display id '{}'", source_id.0))
-            })?;
-            for display in displays.iter() {
-                if unsafe { display.displayID() } == target_id {
-                    return Ok(display.retain());
-                }
+    if let Some(VideoCaptureTarget::Display(source_id)) = &config.video_target
+        && source_id.0 != "auto"
+    {
+        let target_id: u32 = source_id.0.parse().map_err(|_| {
+            PinrayError::InvalidConfig(format!("invalid display id '{}'", source_id.0))
+        })?;
+        for display in displays.iter() {
+            if unsafe { display.displayID() } == target_id {
+                return Ok(display.retain());
             }
-            return Err(PinrayError::Platform(format!(
-                "display {target_id} not found"
-            )));
         }
+        return Err(PinrayError::Platform(format!(
+            "display {target_id} not found"
+        )));
     }
 
     displays
