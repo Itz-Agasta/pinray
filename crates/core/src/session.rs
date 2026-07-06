@@ -274,6 +274,27 @@ mod tests {
     }
 
     #[test]
+    fn repeated_start_stop_is_stable() {
+        let bundle = BackendBundle {
+            info: mock_info(),
+            video: Some(Box::new(BusyVideo)),
+            audio: None,
+        };
+        let mut session = CaptureSession::new(SessionConfig::default(), bundle);
+
+        for _ in 0..100 {
+            session.start().unwrap();
+            assert!(session.is_running());
+            assert!(matches!(
+                session.next_event(Some(Duration::from_millis(1))),
+                Ok(CaptureEvent::Video(_))
+            ));
+            session.stop().unwrap();
+            assert!(!session.is_running());
+        }
+    }
+
+    #[test]
     fn busy_video_does_not_starve_audio() {
         let audio_frame = AudioFrame {
             stream_time_ns: 0,
