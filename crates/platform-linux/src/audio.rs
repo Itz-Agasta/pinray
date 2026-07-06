@@ -43,6 +43,22 @@ use pinray_core::{
 /// are dropped first (~10 ms of audio each).
 const MAX_QUEUED_FRAMES: usize = 512;
 
+/// Shared audio-resolve step for the Wayland and X11 video backends: system
+/// audio goes through PipeWire regardless of the session type.
+pub(crate) fn resolve_system_audio(
+    audio_capture: &Option<pinray_core::AudioCapture>,
+) -> Result<Option<Box<dyn AudioBackend>>> {
+    match audio_capture {
+        None => Ok(None),
+        Some(pinray_core::AudioCapture::SystemMix) => {
+            Ok(Some(Box::new(PipeWireAudioBackend::new()?)))
+        }
+        Some(pinray_core::AudioCapture::Microphone(_)) => Err(PinrayError::Unsupported(
+            "linux microphone capture is not implemented yet".into(),
+        )),
+    }
+}
+
 pub(crate) struct PipeWireAudioBackend {
     control_tx: mpsc::Sender<ControlMessage>,
     event_rx: mpsc::Receiver<AudioFrame>,
@@ -230,8 +246,9 @@ fn run_audio_loop(
                 }
 
                 let frame = AudioFrame {
-                    // TODO: plumb PipeWire timing metadata, same as the video path.
-                    stream_time_ns: 0,
+                    // Dequeue-time monotonic stamp, same anchor as the video
+                    // path; see crate::clock.
+                    stream_time_ns: crate::clock::monotonic_time_ns(),
                     sequence: state.sequence,
                     sample_rate: rate,
                     channels: channels as u16,
