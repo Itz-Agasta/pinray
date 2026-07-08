@@ -27,6 +27,21 @@ pub enum PixelFormat {
     I420,
 }
 
+impl PixelFormat {
+    /// Bytes per pixel for packed RGB/RGBA formats.
+    ///
+    /// `None` for the planar/biplanar YUV formats, where a single
+    /// `width * bytes_per_pixel` row size doesn't apply (each plane has its
+    /// own stride and subsampling).
+    pub fn bytes_per_pixel(self) -> Option<usize> {
+        match self {
+            PixelFormat::Bgra8888 | PixelFormat::Rgba8888 => Some(4),
+            PixelFormat::Rgb888 => Some(3),
+            PixelFormat::Nv12 | PixelFormat::I420 => None,
+        }
+    }
+}
+
 /// Color space hint for interpreting pixel values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorSpace {
@@ -91,6 +106,64 @@ pub struct VideoFrame {
     pub data: FrameData,
     /// Changed regions since the previous frame, when the backend knows.
     pub damage: Option<Vec<Rect>>,
+}
+
+impl VideoFrame {
+    /// Returns [`FrameData::Host`] bytes with row padding stripped, i.e.
+    /// `width * bytes_per_pixel` bytes per row instead of `stride`.
+    ///
+    /// `stride` can be wider than the tightly-packed row size (platform row
+    /// alignment); copying `data` directly into something that assumes tight
+    /// packing (a `rawvideo` pipe, an image encoder) silently skews every row
+    /// after the first. Use this instead of touching `data` directly.
+    ///
+    /// Returns `None` for non-[`FrameData::Host`] variants, or for pixel
+    /// formats without a well-defined bytes-per-pixel (see
+    /// [`PixelFormat::bytes_per_pixel`]).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pinray_core::{FrameData, PixelFormat, VideoFrame};
+    ///
+    /// let (width, height, stride) = (2u32, 2u32, 12u32); // 4 padding bytes/row
+    /// let mut data = Vec::new();
+    /// for row in 0..height {
+    ///     data.extend(std::iter::repeat_n(row as u8, width as usize * 4));
+    ///     data.extend(std::iter::repeat_n(0xAA, (stride - width * 4) as usize));
+    /// }
+    /// let frame = VideoFrame {
+    ///     stream_time_ns: 0,
+    ///     sequence: 0,
+    ///     width,
+    ///     height,
+    ///     stride,
+    ///     pixel_format: PixelFormat::Bgra8888,
+    ///     color_space: None,
+    ///     data: FrameData::Host(data),
+    ///     damage: None,
+    /// };
+    ///
+    /// let tight = frame.to_tight_bytes().unwrap();
+    /// assert_eq!(tight.len(), (width * height * 4) as usize);
+    /// assert!(tight.iter().all(|&b| b != 0xAA)); // padding is gone
+    /// ```
+    pub fn to_tight_bytes(&self) -> Option<Vec<u8>> {
+        let FrameData::Host(buf) = &self.data else {
+            return None;
+        };
+        let bpp = self.pixel_format.bytes_per_pixel()?;
+        let row_bytes = self.width as usize * bpp;
+        if self.stride as usize == row_bytes {
+            return Some(buf.clone());
+        }
+        let mut out = Vec::with_capacity(row_bytes * self.height as usize);
+        for row in 0..self.height as usize {
+            let start = row * self.stride as usize;
+            out.extend_from_slice(&buf[start..start + row_bytes]);
+        }
+        Some(out)
+    }
 }
 
 /// Why a [`GapEvent`] was emitted.

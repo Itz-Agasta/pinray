@@ -8,31 +8,6 @@
 //! is deliberately out of scope: feed frames to ffmpeg, WebRTC, wgpu, or
 //! your own pipeline.
 //!
-//! # Quick start
-//!
-//! ```no_run
-//! use std::time::Duration;
-//! use pinray::{AudioCapture, CaptureEvent, CaptureSession, SourceId, VideoCaptureTarget};
-//!
-//! # fn main() -> Result<(), pinray::PinrayError> {
-//! let mut session = CaptureSession::builder()
-//!     .video_target(VideoCaptureTarget::Display(SourceId::new("auto")))
-//!     .audio(AudioCapture::SystemMix)
-//!     .build()?;
-//!
-//! session.start()?;
-//! match session.next_event(Some(Duration::from_secs(5)))? {
-//!     CaptureEvent::Video(frame) => println!("{}x{}", frame.width, frame.height),
-//!     CaptureEvent::Audio(frame) => println!("{} Hz", frame.sample_rate),
-//!     other => println!("{other:?}"),
-//! }
-//! session.stop()?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! # Core concepts
-//!
 //! - [`CaptureSession`] — builder-configured lifecycle (`start` / `next_event`
 //!   / `stop`); [`enumerate_sources`] lists displays, windows, and audio
 //!   devices up front.
@@ -40,9 +15,7 @@
 //!   (dropped frames / backend restart), or `End`.
 //! - [`BackendPreference`] — `Auto` picks the right backend per platform;
 //!   [`CaptureSession::backend_info`] reports what was actually selected.
-//!
-//! Platform requirements, permissions, and per-backend limitations are
-//! documented in the repository's `docs/` folder.
+#![doc = include_str!("../../../docs/getting-started.md")]
 
 use pinray_core::{BackendBundle, BackendResolver, Result, SessionConfig};
 

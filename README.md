@@ -13,8 +13,8 @@
 [Getting Started](docs/getting-started.md) •
 [Platform Support](docs/platforms.md) •
 [Troubleshooting](docs/troubleshooting.md) •
-[API Docs](https://docs.rs/pinray)
-
+[API Docs](https://docs.rs/pinray) •
+[Type reference (any platform)](https://docs.rs/pinray-core)
 
 <img width="1600" height="900" alt="pinray-banner" src="https://github.com/user-attachments/assets/763fcf60-1fa6-4e25-82d9-04c88563aca4" />
 
