@@ -869,7 +869,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pinray"
-version = "0.2.2"
+version = "0.2.4"
 dependencies = [
  "pinray-core",
  "pinray-platform-linux",
@@ -880,7 +880,7 @@ dependencies = [
 
 [[package]]
 name = "pinray-core"
-version = "0.2.2"
+version = "0.2.4"
 dependencies = [
  "thiserror",
  "tracing",
@@ -888,7 +888,7 @@ dependencies = [
 
 [[package]]
 name = "pinray-platform-linux"
-version = "0.2.2"
+version = "0.2.4"
 dependencies = [
  "pinray-core",
  "pipewire",
@@ -900,7 +900,7 @@ dependencies = [
 
 [[package]]
 name = "pinray-platform-macos"
-version = "0.2.2"
+version = "0.2.4"
 dependencies = [
  "block2",
  "dispatch2",
@@ -916,7 +916,7 @@ dependencies = [
 
 [[package]]
 name = "pinray-platform-windows"
-version = "0.2.2"
+version = "0.2.4"
 dependencies = [
  "pinray-core",
  "tracing",
