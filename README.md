@@ -16,7 +16,8 @@
 [API Docs](https://docs.rs/pinray) •
 [Type reference (any platform)](https://docs.rs/pinray-core)
 
-<img width="1600" height="900" alt="pinray-banner" src="https://github.com/user-attachments/assets/763fcf60-1fa6-4e25-82d9-04c88563aca4" />
+<img width="1200" height="600" alt="banner" src="https://github.com/user-attachments/assets/f8744ece-3aff-4c72-8fa8-add76d571280" />
+
 
 
 </div>
