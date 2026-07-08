@@ -15,7 +15,7 @@ docs.rs/pinray-core if in doubt - this file can drift from the crate.
 
 ## Docs
 
-- Guide: docs.rs/pinray (crate-level docs) or `docs/getting-started.md` in the repo
+- Guide: docs.rs/pinray (crate-level docs) or `crates/pinray/docs/getting-started.md` in the repo
 - Full type reference on any platform: docs.rs/pinray-core (no native deps, always builds untouched - the facade crate `pinray` builds docs.rs for one fixed target per platform because native libs like PipeWire aren't available on their Linux builders; type definitions are identical everywhere regardless)
 - Platform matrix / per-backend caveats: `docs/platforms.md`
 - Troubleshooting: `docs/troubleshooting.md`
@@ -159,7 +159,7 @@ Config defaults (`SessionConfig::default()`): `backend_preference: Auto`,
    whichever stream is longer. Fix: pace output frames using `stream_time_ns`
    deltas (duplicate the last frame to fill gaps) instead of assuming one
    captured frame equals one output frame at your declared rate. Full
-   worked example: `docs/getting-started.md` "Muxing frames into a video file".
+   worked example: `crates/pinray/docs/getting-started.md` "Muxing frames into a video file".
 
 3. **`FrameData` has 4 variants, 1 live.** Every backend currently produces
    only `Host`; the other three are reserved for future zero-copy paths.

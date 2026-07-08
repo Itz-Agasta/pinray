@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.88-orange.svg)](#minimum-supported-rust-version)
 
-[Getting Started](docs/getting-started.md) •
+[Getting Started](crates/pinray/docs/getting-started.md) •
 [Platform Support](docs/platforms.md) •
 [Troubleshooting](docs/troubleshooting.md) •
 [API Docs](https://docs.rs/pinray) •
@@ -78,7 +78,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Pick specific displays/windows with `pinray::enumerate_sources()`, capture audio-only without any permission dialogs, force a backend with `BackendPreference` - see [Getting started](docs/getting-started.md).
+Pick specific displays/windows with `pinray::enumerate_sources()`, capture audio-only without any permission dialogs, force a backend with `BackendPreference` - see [Getting started](crates/pinray/docs/getting-started.md).
 
 ## Requirements
 

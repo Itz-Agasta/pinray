@@ -15,7 +15,7 @@
 //!   (dropped frames / backend restart), or `End`.
 //! - [`BackendPreference`] — `Auto` picks the right backend per platform;
 //!   [`CaptureSession::backend_info`] reports what was actually selected.
-#![doc = include_str!("../../../docs/getting-started.md")]
+#![doc = include_str!("../docs/getting-started.md")]
 
 use pinray_core::{BackendBundle, BackendResolver, Result, SessionConfig};
 
