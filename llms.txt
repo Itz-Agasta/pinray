@@ -1,0 +1,172 @@
+# pinray
+
+Cross-platform screen and audio capture for Rust. Talks to each OS's native
+capture API (XDG portal + PipeWire and X11 on Linux, ScreenCaptureKit on
+macOS, DXGI/Windows Graphics Capture + WASAPI on Windows) and hands you raw
+video/audio frames with metadata intact - stride, pixel format, timestamps,
+sequence numbers, drop signals. Encoding is out of scope by design: pipe
+frames into ffmpeg, WebRTC, wgpu, or your own pipeline.
+
+This file is a flat, verified reference for agents integrating pinray, so you
+don't have to re-derive the API surface from docs.rs one page at a time.
+Everything below was checked against `crates/core/src/*.rs` directly, not
+guessed. If you're reading this from a released version, re-verify against
+docs.rs/pinray-core if in doubt - this file can drift from the crate.
+
+## Docs
+
+- Guide: docs.rs/pinray (crate-level docs) or `docs/getting-started.md` in the repo
+- Full type reference on any platform: docs.rs/pinray-core (no native deps, always builds untouched - the facade crate `pinray` builds docs.rs for one fixed target per platform because native libs like PipeWire aren't available on their Linux builders; type definitions are identical everywhere regardless)
+- Platform matrix / per-backend caveats: `docs/platforms.md`
+- Troubleshooting: `docs/troubleshooting.md`
+
+## Quick start
+
+```rust,no_run
+use std::time::Duration;
+use pinray::{AudioCapture, CaptureEvent, CaptureSession, SourceId, VideoCaptureTarget};
+
+let mut session = CaptureSession::builder()
+    .video_target(VideoCaptureTarget::Display(SourceId::new("auto")))
+    .audio(AudioCapture::SystemMix)
+    .build()?;
+session.start()?;
+match session.next_event(Some(Duration::from_secs(5)))? {
+    CaptureEvent::Video(f) => println!("{}x{}", f.width, f.height),
+    CaptureEvent::Audio(f) => println!("{} Hz", f.sample_rate),
+    other => println!("{other:?}"),
+}
+session.stop()?;
+```
+
+Audio-only, video-only, and video+audio are all first-class - `.video_target(...)` and `.audio(...)` are independent builder calls, `build()` only requires at least one of them set. For audio-only: skip `.video_target`, use `.audio(AudioCapture::SystemMix)`, drain with `.next_audio(timeout)` (or `.next_event` and match `CaptureEvent::Audio`). Runnable: `cargo run --example audio_smoke`. Video-only: skip `.audio`. Neither shows a permission dialog on Linux/Windows for audio-only; video (any mode) does on Wayland.
+
+## Core API
+
+`CaptureSession::builder() -> SessionBuilder`, then chain:
+`.video_target(VideoCaptureTarget)`, `.audio(AudioCapture)`,
+`.pixel_format(PixelFormat)`, `.restore_token(impl Into<String>)`,
+`.color_space(Option<ColorSpace>)`, `.cursor_mode(CursorMode)`,
+`.crop_rect(Option<Rect>)`, `.frame_rate(Option<u32>)`,
+`.queue_depth(u32)`, `.backend_preference(BackendPreference)`,
+`.build() -> Result<CaptureSession>`.
+
+`CaptureSession`: `.start()`, `.stop()` (both idempotent),
+`.is_running() -> bool`, `.backend_info() -> &BackendInfo`,
+`.next_event(Option<Duration>) -> Result<CaptureEvent>`,
+`.next_audio(Option<Duration>) -> Result<AudioFrame>`.
+`None` timeout blocks forever; `Some(Duration::ZERO)` is a non-blocking poll.
+
+Free functions: `available_backends() -> Vec<BackendInfo>`,
+`enumerate_sources() -> Result<Vec<CaptureSource>>`.
+
+## Types (verified against crates/core/src/*.rs)
+
+```rust
+enum CaptureEvent { Video(VideoFrame), Audio(AudioFrame), Gap(GapEvent), End }
+
+struct VideoFrame {
+    stream_time_ns: i64,   // monotonic within a session, comparable to AudioFrame's;
+                           // epoch is boot time on macOS/Windows, process-relative on Linux
+    sequence: u64,         // jump = dropped frames
+    width: u32,
+    height: u32,
+    stride: u32,           // bytes/row in FrameData::Host - can exceed width*bpp, see footgun #1
+    pixel_format: PixelFormat,
+    color_space: Option<ColorSpace>,
+    data: FrameData,
+    damage: Option<Vec<Rect>>,
+}
+impl VideoFrame {
+    // Strips row padding (stride -> width*bpp). Use this, not `data` directly.
+    fn to_tight_bytes(&self) -> Option<Vec<u8>>;
+}
+
+enum FrameData {
+    Host(Vec<u8>),              // the only variant any backend produces today
+    Dmabuf(DmabufFrame),        // reserved, unused
+    CvPixelBuffer(CvPixelBufferHandle), // reserved, unused
+    D3D11Texture(D3D11TextureHandle),   // reserved, unused
+}
+
+enum PixelFormat { Bgra8888, Rgba8888, Rgb888, Nv12, I420 }
+// All backends deliver Bgra8888 natively; Rgba8888 costs a CPU swizzle.
+// Nv12/I420 are not yet produced by any backend.
+impl PixelFormat { fn bytes_per_pixel(self) -> Option<usize>; } // None for Nv12/I420
+
+enum ColorSpace { Srgb, DisplayP3, Bt709, Bt2020 }
+enum CursorMode { Embedded, Hidden }
+struct Rect { x: i32, y: i32, width: u32, height: u32 }
+
+struct AudioFrame {
+    stream_time_ns: i64,   // same clock as VideoFrame::stream_time_ns
+    sequence: u64,
+    sample_rate: u32,
+    channels: u16,
+    sample_format: SampleFormat,
+    data: AudioData,
+}
+enum SampleFormat { I16, I32, F32, F64 }               // NOT S16/S24/S32/U8
+enum AudioData { Interleaved(Vec<u8>), Planar(Vec<Vec<u8>>) } // L R L R... vs one buffer/channel
+
+enum VideoCaptureTarget { Display(SourceId), Window(SourceId) }
+enum AudioCapture { SystemMix, Microphone(SourceId) }
+// Microphone: no backend implements this yet - CaptureSession::builder().audio(Microphone(_)).build()
+// fails eagerly with PinrayError::Unsupported on all three platforms (checked during backend
+// resolution inside build(), not lazily on first use).
+
+struct SourceId(pub String); // opaque; "auto" = primary display, no enumeration needed
+enum CaptureSource {          // what enumerate_sources() returns - NOT a struct with .id/.name/.kind
+    Display(DisplaySource),
+    Window(WindowSource),
+    SystemAudio(AudioDeviceSource),
+    Microphone(AudioDeviceSource),
+}
+struct DisplaySource { id: SourceId, name: String, width: u32, height: u32, scale_factor_milli: u32, is_primary: bool }
+struct WindowSource { id: SourceId, title: String, app_name: Option<String> }
+struct AudioDeviceSource { id: SourceId, name: String, is_default: bool }
+
+enum GapReason { Dropped, FormatChanged, BackendRestarted, Unknown }
+struct GapEvent { stream_time_ns: i64, reason: GapReason, dropped_frames: Option<u32> }
+
+enum BackendPreference { Auto, LinuxWaylandPortal, LinuxX11, MacScreenCaptureKit, WindowsDxgi, WindowsWgc }
+enum BackendKind { LinuxWaylandPortal, LinuxX11, LinuxPipeWireAudio, MacScreenCaptureKit, WindowsDxgi, WindowsWgc, WindowsWasapi }
+struct BackendInfo { kind: BackendKind, supports_audio: bool, zero_copy: bool, notes: &'static str } // field is `notes`, not `note`, and &'static str not Option<String>
+
+enum PinrayError {
+    InvalidConfig(String), BackendUnavailable(String), BackendNotSelected,
+    Timeout(Duration), Unsupported(String), Platform(String),
+}
+```
+
+Config defaults (`SessionConfig::default()`): `backend_preference: Auto`,
+`pixel_format: Bgra8888`, `color_space: Some(Srgb)`, `cursor_mode: Embedded`,
+`frame_rate: Some(60)`, `queue_depth: 2`. Build fails if neither
+`video_target` nor `audio_capture` is set.
+
+## Known footguns (found by actually building and running a recorder, not theoretical)
+
+1. **Stride vs width.** `VideoFrame.stride` can exceed `width * bytes_per_pixel`.
+   Copying `FrameData::Host` bytes straight into a `rawvideo` pipe or image
+   encoder skews every row after the first - no crash, just wrong pixels.
+   Fix: call `frame.to_tight_bytes()`, never touch `data` directly.
+
+2. **Frame rate is a request, not a guarantee.** Push-driven backends
+   (Wayland portal) deliver frames on damage events, not a fixed clock, even
+   if you set `.frame_rate(Some(30))`. Declaring a constant `-framerate` to
+   ffmpeg's rawvideo demuxer while streaming whatever arrives produces a file
+   that plays back sped up or slowed down, and `-shortest` silently truncates
+   whichever stream is longer. Fix: pace output frames using `stream_time_ns`
+   deltas (duplicate the last frame to fill gaps) instead of assuming one
+   captured frame equals one output frame at your declared rate. Full
+   worked example: `docs/getting-started.md` "Muxing frames into a video file".
+
+3. **`FrameData` has 4 variants, 1 live.** Every backend currently produces
+   only `Host`; the other three are reserved for future zero-copy paths.
+   You still have to handle them in a match (or use `to_tight_bytes()`,
+   which already does and returns `None` for them).
+
+## MSRV / stability
+
+Rust 1.88 (let-chains). Crate is 0.2.x and pre-1.0: minor versions may break
+the API. Pin a minor version for stability.
