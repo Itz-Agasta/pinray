@@ -7,12 +7,12 @@
 [![Crates.io](https://img.shields.io/crates/v/pinray.svg)](https://crates.io/crates/pinray)
 [![Documentation](https://docs.rs/pinray/badge.svg)](https://docs.rs/pinray)
 [![CI](https://github.com/Itz-Agasta/pinray/actions/workflows/ci.yml/badge.svg)](https://github.com/Itz-Agasta/pinray/actions)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Itz-Agasta/pinray/blob/main/LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.88-orange.svg)](#minimum-supported-rust-version)
 
-[Getting Started](crates/pinray/docs/getting-started.md) •
-[Platform Support](docs/platforms.md) •
-[Troubleshooting](docs/troubleshooting.md) •
+[Getting Started](https://github.com/Itz-Agasta/pinray/blob/main/crates/pinray/docs/getting-started.md) •
+[Platform Support](https://github.com/Itz-Agasta/pinray/blob/main/docs/platforms.md) •
+[Troubleshooting](https://github.com/Itz-Agasta/pinray/blob/main/docs/troubleshooting.md) •
 [API Docs](https://docs.rs/pinray) •
 [Type reference (any platform)](https://docs.rs/pinray-core)
 
@@ -42,7 +42,7 @@ pinray is a capture **infrastructure** crate: it talks to each OS's native captu
 | **macOS** 12.3+   | ✅ ScreenCaptureKit            | ✅ ScreenCaptureKit | display + window capture       |
 | **Windows** 10+   | ✅ DXGI + WGC                  | ✅ WASAPI loopback  | DXGI→WGC auto-fallback         |
 
-Full matrix with per-backend limitations: [docs/platforms.md](docs/platforms.md).
+Full matrix with per-backend limitations: [docs/platforms.md](https://github.com/Itz-Agasta/pinray/blob/main/docs/platforms.md).
 
 ## Quick start
 
@@ -78,7 +78,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Pick specific displays/windows with `pinray::enumerate_sources()`, capture audio-only without any permission dialogs, force a backend with `BackendPreference` - see [Getting started](crates/pinray/docs/getting-started.md).
+Pick specific displays/windows with `pinray::enumerate_sources()`, capture audio-only without any permission dialogs, force a backend with `BackendPreference` - see [Getting started](https://github.com/Itz-Agasta/pinray/blob/main/crates/pinray/docs/getting-started.md).
 
 ## Requirements
 
@@ -100,7 +100,7 @@ cargo run --example windows_smoke    # Windows (PINRAY_BACKEND=wgc|dxgi to force
 
 ## Architecture
 
-Cargo workspace: [`pinray-core`](crates/core) defines the frame model and backend traits, one crate per platform owns its native/unsafe code ([`platform-linux`](crates/platform-linux), [`platform-macos`](crates/platform-macos), [`platform-windows`](crates/platform-windows)), and [`pinray`](crates/pinray) is the public facade. A future encoder crate can slot in without touching capture.
+Cargo workspace: [`pinray-core`](https://github.com/Itz-Agasta/pinray/tree/main/crates/core) defines the frame model and backend traits, one crate per platform owns its native/unsafe code ([`platform-linux`](https://github.com/Itz-Agasta/pinray/tree/main/crates/platform-linux), [`platform-macos`](https://github.com/Itz-Agasta/pinray/tree/main/crates/platform-macos), [`platform-windows`](https://github.com/Itz-Agasta/pinray/tree/main/crates/platform-windows)), and [`pinray`](https://github.com/Itz-Agasta/pinray/tree/main/crates/pinray) is the public facade. A future encoder crate can slot in without touching capture.
 
 ## Stability
 
@@ -116,4 +116,4 @@ Issues and PRs welcome. Please include `session.backend_info()` output and `RUST
 
 ## License
 
-MIT - see [LICENSE](LICENSE). Contact: rupamgolui@proton.me
+MIT - see [LICENSE](https://github.com/Itz-Agasta/pinray/blob/main/LICENSE). Contact: rupamgolui@proton.me
