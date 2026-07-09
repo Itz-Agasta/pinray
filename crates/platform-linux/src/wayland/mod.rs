@@ -102,7 +102,7 @@ impl WaylandVideoBackend {
             .ok_or_else(|| PinrayError::Platform("portal returned no screencast stream".into()))?;
 
         if let Some(token) = &restore_token {
-            tracing::info!(restore_token = %token, "portal returned restore token");
+            tracing::debug!(restore_token = %token, "portal returned restore token");
         }
 
         let (control_tx, control_rx) = mpsc::channel();
