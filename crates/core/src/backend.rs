@@ -54,6 +54,14 @@ pub trait VideoBackend: Send {
     fn start(&mut self) -> Result<()>;
     fn stop(&mut self) -> Result<()>;
     fn next_event(&mut self, timeout: Option<Duration>) -> Result<CaptureEvent>;
+
+    /// Returns the portal restore token negotiated for this session, if any.
+    ///
+    /// Only meaningful for backends that go through a permission portal
+    /// (Wayland's XDG Desktop Portal); other backends keep the default `None`.
+    fn restore_token(&self) -> Option<String> {
+        None
+    }
 }
 
 /// A platform audio capture implementation; same timeout contract as

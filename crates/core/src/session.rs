@@ -37,6 +37,16 @@ impl CaptureSession {
         &self.backend_info
     }
 
+    /// Returns the portal restore token negotiated for this session, if any.
+    ///
+    /// Available once the session is built on backends that use a permission
+    /// portal (Wayland); other backends return `None`.
+    pub fn restore_token(&self) -> Option<String> {
+        self.video_backend
+            .as_ref()
+            .and_then(|video| video.restore_token())
+    }
+
     pub fn is_running(&self) -> bool {
         self.running
     }

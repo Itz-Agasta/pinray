@@ -81,6 +81,14 @@ impl CaptureSession {
         self.inner.backend_info()
     }
 
+    /// Returns the portal restore token negotiated for this session, if any.
+    ///
+    /// Available once the session is built on backends that use a permission
+    /// portal (Wayland); other backends return `None`.
+    pub fn restore_token(&self) -> Option<String> {
+        self.inner.restore_token()
+    }
+
     pub fn is_running(&self) -> bool {
         self.inner.is_running()
     }

@@ -13,20 +13,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
+    let restore_token = std::env::args().nth(1);
+
     println!("[1] building session (video + system audio)...");
-    let mut session = CaptureSession::builder()
+    let mut builder = CaptureSession::builder()
         .backend_preference(BackendPreference::LinuxWaylandPortal)
         .video_target(VideoCaptureTarget::Display(SourceId::new(
             "portal-default-display",
         )))
         .audio(AudioCapture::SystemMix)
-        .pixel_format(PixelFormat::Bgra8888)
-        .build()?;
+        .pixel_format(PixelFormat::Bgra8888);
+    if let Some(token) = restore_token {
+        println!("[1] using supplied restore token");
+        builder = builder.restore_token(token);
+    }
+    let mut session = builder.build()?;
 
     println!("[2] selected backend: {:?}", session.backend_info().kind);
     println!("[3] starting session...");
     session.start()?;
-    println!("[4] session started, entering capture loop...");
+    println!(
+        "[4] session started, restore_token={:?}, entering capture loop...",
+        session.restore_token()
+    );
 
     let mut videos = 0u32;
     let mut audios = 0u32;
