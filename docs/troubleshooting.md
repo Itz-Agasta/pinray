@@ -27,7 +27,7 @@ pinray needs Rust 1.88+. `rustup update stable`.
 Neither `XDG_SESSION_TYPE=wayland`/`WAYLAND_DISPLAY` nor `DISPLAY` is set - you're on a headless host. Video needs a session; audio-only sessions still work if PipeWire runs.
 
 **Portal dialog appears every run**
-Capture the restore token: after the first session the portal returns one (logged at info level; API surfacing is on the roadmap), then pass `.restore_token(token)`.
+Capture the restore token: after the first session read it from `session.restore_token()`, persist it, then pass `.restore_token(token)` on the next run to skip the dialog.
 
 **`GetImage on the root window failed ... Xwayland root is not readable`**
 You forced `LinuxX11` inside a Wayland session. Rootless Xwayland has no readable root - use the Wayland backend (`Auto` does this), or run a real Xorg session.

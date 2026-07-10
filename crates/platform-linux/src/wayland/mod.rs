@@ -78,6 +78,7 @@ pub(super) struct VideoSize {
 
 struct WaylandVideoBackend {
     info: BackendInfo,
+    restore_token: Option<String>,
     control_tx: mpsc::Sender<ControlMessage>,
     event_rx: mpsc::Receiver<CaptureEvent>,
     worker: Option<thread::JoinHandle<Result<()>>>,
@@ -100,8 +101,8 @@ impl WaylandVideoBackend {
             .next()
             .ok_or_else(|| PinrayError::Platform("portal returned no screencast stream".into()))?;
 
-        if let Some(token) = restore_token {
-            tracing::info!(restore_token = %token, "portal returned restore token");
+        if let Some(token) = &restore_token {
+            tracing::debug!(restore_token = %token, "portal returned restore token");
         }
 
         let (control_tx, control_rx) = mpsc::channel();
@@ -136,6 +137,7 @@ impl WaylandVideoBackend {
                 zero_copy: false,
                 notes: "Wayland video via XDG Desktop Portal + PipeWire",
             },
+            restore_token,
             control_tx,
             event_rx,
             worker: Some(worker),
@@ -146,6 +148,10 @@ impl WaylandVideoBackend {
 impl VideoBackend for WaylandVideoBackend {
     fn info(&self) -> BackendInfo {
         self.info.clone()
+    }
+
+    fn restore_token(&self) -> Option<String> {
+        self.restore_token.clone()
     }
 
     fn start(&mut self) -> Result<()> {
