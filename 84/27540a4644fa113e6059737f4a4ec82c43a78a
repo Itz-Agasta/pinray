@@ -1,0 +1,19 @@
+crates/platform-windows/src/wgc.rs
+  s_550f269b7b21e8::t_6a5af45ef8e9db 52-56,70-83,98,427-438,478-493
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8427540a4644fa113e6059737f4a4ec82c43a78a",
+  "prompts": {},
+  "sessions": {
+    "s_550f269b7b21e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3f2749c7-ffeb-45ff-9aa6-a1c8e96ee4fc",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Itz-Agasta <rupamgolui69@gmail.com>"
+    }
+  }
+}
