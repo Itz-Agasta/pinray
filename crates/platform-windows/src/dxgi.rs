@@ -29,6 +29,26 @@ use windows::core::Interface;
 use crate::d3d::{create_d3d_device, qpc_frequency, qpc_to_ns, texture_to_host, win_err};
 use crate::enumerate::DisplayEntry;
 
+/// What the pacing gate decided before anything is acquired.
+#[derive(Debug, PartialEq, Eq)]
+enum Pace {
+    /// The caller's timeout runs out before the next frame is due.
+    Expired,
+    /// Sleep this long, then acquire.
+    Wait(Duration),
+}
+
+/// Decides whether the caller can be made to wait for the next scheduled
+/// frame. The caller's timeout wins: a frame due after it is a `Timeout`, the
+/// same answer an idle desktop gives.
+fn paced_wait(next_frame_at: Option<Instant>, deadline: Option<Instant>, now: Instant) -> Pace {
+    match next_frame_at {
+        Some(due) if deadline.is_some_and(|deadline| due > deadline) => Pace::Expired,
+        Some(due) => Pace::Wait(due.saturating_duration_since(now)),
+        None => Pace::Wait(Duration::ZERO),
+    }
+}
+
 /// When the next frame may be acquired. Advances one interval per delivered
 /// frame so the average rate holds even when a frame lands late, and
 /// resynchronizes once the desktop has been quiet for longer than an interval
@@ -129,14 +149,10 @@ impl VideoBackend for DxgiVideoBackend {
 
         // Hold off the acquire until the frame is due. Waiting costs nothing
         // here, where acquiring early would copy a frame only to throw it away.
-        if let Some(next_frame_at) = self.next_frame_at {
-            if deadline.is_some_and(|deadline| next_frame_at > deadline) {
-                return Err(PinrayError::Timeout(timeout.unwrap_or_default()));
-            }
-            let now = Instant::now();
-            if next_frame_at > now {
-                std::thread::sleep(next_frame_at - now);
-            }
+        match paced_wait(self.next_frame_at, deadline, Instant::now()) {
+            Pace::Expired => return Err(PinrayError::Timeout(timeout.unwrap_or_default())),
+            Pace::Wait(wait) if !wait.is_zero() => std::thread::sleep(wait),
+            Pace::Wait(_) => {}
         }
 
         loop {
@@ -186,6 +202,11 @@ impl VideoBackend for DxgiVideoBackend {
                 continue;
             }
 
+            // Anchor the schedule here, before the staging copy. Using the
+            // post-copy instant adds the copy on top of the interval and
+            // stretches every period by it once a copy approaches one frame.
+            let acquired_at = Instant::now();
+
             let resource = resource.ok_or_else(|| {
                 PinrayError::Platform("AcquireNextFrame returned no resource".into())
             })?;
@@ -204,10 +225,8 @@ impl VideoBackend for DxgiVideoBackend {
             let copy = copy?;
 
             if let Some(interval) = self.min_frame_interval {
-                let now = Instant::now();
-                // Advance the schedule by one interval, resynchronizing if the
-                // desktop went quiet for longer than that.
-                self.next_frame_at = Some(advance_schedule(self.next_frame_at, now, interval));
+                self.next_frame_at =
+                    Some(advance_schedule(self.next_frame_at, acquired_at, interval));
             }
 
             let sequence = self.sequence;
@@ -230,7 +249,7 @@ impl VideoBackend for DxgiVideoBackend {
 
 #[cfg(test)]
 mod tests {
-    use super::advance_schedule;
+    use super::{Pace, advance_schedule, paced_wait};
     use std::time::{Duration, Instant};
 
     const INTERVAL: Duration = Duration::from_millis(100);
@@ -264,6 +283,11 @@ mod tests {
     /// Drives the scheduler against a desktop changing every `change_ms` and
     /// returns how many frames come out.
     fn delivered(change_ms: u64, requested: u64, secs: u64) -> u64 {
+        delivered_with_copy(change_ms, requested, secs, 0)
+    }
+
+    /// As above, but each frame also costs `copy_ms` to stage into host memory.
+    fn delivered_with_copy(change_ms: u64, requested: u64, secs: u64, copy_ms: u64) -> u64 {
         let interval = Duration::from_nanos(1_000_000_000 / requested);
         let change = Duration::from_millis(change_ms);
         let base = Instant::now();
@@ -278,9 +302,10 @@ mod tests {
             if arrival < ready {
                 arrival += change;
             }
-            now = arrival;
+            // The schedule is anchored on the acquire; the copy happens after.
+            deadline = Some(advance_schedule(deadline, arrival, interval));
+            now = arrival + Duration::from_millis(copy_ms);
             frames += 1;
-            deadline = Some(advance_schedule(deadline, now, interval));
         }
         frames
     }
@@ -320,5 +345,73 @@ mod tests {
         // Changes every 200 ms cannot become 30 fps just because it was asked for.
         let got = delivered_fps(200, 30, 20);
         assert!(got <= 5.2, "delivered {got:.2} from a 5 fps desktop");
+    }
+
+    #[test]
+    fn the_gate_waits_until_the_frame_is_due() {
+        let base = Instant::now();
+        let due = base + Duration::from_millis(30);
+        assert_eq!(
+            paced_wait(Some(due), Some(base + Duration::from_millis(500)), base),
+            Pace::Wait(Duration::from_millis(30))
+        );
+    }
+
+    #[test]
+    fn the_gate_does_not_wait_without_a_schedule() {
+        let base = Instant::now();
+        assert_eq!(
+            paced_wait(None, Some(base), base),
+            Pace::Wait(Duration::ZERO)
+        );
+    }
+
+    #[test]
+    fn an_overdue_frame_is_not_slept_on() {
+        let base = Instant::now();
+        let due = base - Duration::from_millis(40);
+        assert_eq!(
+            paced_wait(Some(due), None, base),
+            Pace::Wait(Duration::ZERO)
+        );
+    }
+
+    #[test]
+    fn the_callers_timeout_wins_over_the_schedule() {
+        // 5 fps requested but only 10 ms of patience: the caller gets Timeout,
+        // the same answer an idle desktop gives, instead of being slept past it.
+        let base = Instant::now();
+        let due = base + Duration::from_millis(200);
+        let deadline = base + Duration::from_millis(10);
+        assert_eq!(paced_wait(Some(due), Some(deadline), base), Pace::Expired);
+    }
+
+    #[test]
+    fn a_frame_due_exactly_at_the_deadline_is_still_waited_for() {
+        let base = Instant::now();
+        let due = base + Duration::from_millis(100);
+        assert_eq!(
+            paced_wait(Some(due), Some(due), base),
+            Pace::Wait(Duration::from_millis(100))
+        );
+    }
+
+    #[test]
+    fn without_a_timeout_the_gate_always_waits() {
+        let base = Instant::now();
+        let due = base + Duration::from_secs(10);
+        assert_eq!(
+            paced_wait(Some(due), None, base),
+            Pace::Wait(Duration::from_secs(10))
+        );
+    }
+
+    #[test]
+    fn a_slow_copy_does_not_stretch_the_period() {
+        // A 20 ms copy against a 60 fps request (16.6 ms interval). Anchoring
+        // the schedule after the copy adds it on top of the interval and
+        // settles near 27 fps, where the copy alone allows about 50.
+        let fps = delivered_with_copy(4, 60, 20, 20) as f64 / 20.0;
+        assert!(fps > 40.0, "copy-bound delivery collapsed to {fps:.1} fps");
     }
 }
