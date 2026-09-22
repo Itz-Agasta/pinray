@@ -106,7 +106,7 @@ pub(super) fn normalize_frame(
         }
         (VideoFormat::BGRA, PixelFormat::Rgba8888) => {
             let mut data = raw.to_vec();
-            for pixel in data.chunks_exact_mut(4) {
+            for pixel in data.as_chunks_mut::<4>().0 {
                 pixel.swap(0, 2);
             }
             (PixelFormat::Rgba8888, data)
@@ -116,14 +116,14 @@ pub(super) fn normalize_frame(
         (VideoFormat::RGB, PixelFormat::Rgb888) => (PixelFormat::Rgb888, raw.to_vec()),
         (VideoFormat::BGRx, PixelFormat::Rgba8888) => {
             let mut data = raw.to_vec();
-            for pixel in data.chunks_exact_mut(4) {
+            for pixel in data.as_chunks_mut::<4>().0 {
                 pixel.swap(0, 2);
             }
             (PixelFormat::Rgba8888, data)
         }
         (VideoFormat::RGBx, PixelFormat::Bgra8888) => {
             let mut data = raw.to_vec();
-            for pixel in data.chunks_exact_mut(4) {
+            for pixel in data.as_chunks_mut::<4>().0 {
                 pixel.swap(0, 2);
             }
             (PixelFormat::Bgra8888, data)

@@ -91,14 +91,14 @@ fn normalize_pixels(
         }
         (f, _) if f == kCVPixelFormatType_32BGRA => {
             let mut dst = copy_rows(raw, row, pw, ph);
-            for px in dst.chunks_exact_mut(4) {
+            for px in dst.as_chunks_mut::<4>().0 {
                 px.swap(0, 2);
             }
             (PixelFormat::Rgba8888, dst)
         }
         (f, _) if f == kCVPixelFormatType_32RGBA => {
             let mut dst = copy_rows(raw, row, pw, ph);
-            for px in dst.chunks_exact_mut(4) {
+            for px in dst.as_chunks_mut::<4>().0 {
                 px.swap(0, 2);
             }
             (PixelFormat::Bgra8888, dst)
