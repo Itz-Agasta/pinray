@@ -12,6 +12,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 a session asking for 30 fps was handed frames at whatever rate the display or
 desktop produced.
 
+### Added
+
+- `CaptureSession::restore_token()` surfaces the Wayland portal restore token to
+  callers, so a later session can skip the permission dialog. This landed after
+  the 0.2.4 release and ships here.
+
 ### Fixed
 
 - **WGC honors `frame_rate`** ([#8], reported in [#7]). The free-threaded frame
@@ -40,9 +46,11 @@ desktop produced.
   the setting has always meant on the Linux and macOS backends. Pass
   `.frame_rate(None)` to keep the old behavior and take every frame the display
   or desktop produces.
-- Internal crate dependencies are pinned to the exact workspace version rather
-  than the `0.2` range, so `pinray` can no longer resolve against an older
-  `pinray-core` that lacks APIs it calls.
+- Internal crate dependencies are pinned to the exact workspace version instead
+  of the `0.2` range. With the range, `pinray` could resolve against an older
+  `pinray-core` that lacks APIs it calls, which is not theoretical: `pinray`
+  0.2.5 calls `CaptureSession::restore_token`, absent from the published
+  `pinray-core` 0.2.4.
 - `docs/platforms.md` records what each Windows backend does with `frame_rate`,
   and the feature matrix is corrected.
 - Adopted `as_chunks_mut` across the platform crates for
@@ -67,24 +75,29 @@ CPU and staging bandwidth scaling linearly. The `MinUpdateInterval` success path
 is compile verified only, since it needs a Windows 11 build exposing
 `IGraphicsCaptureSession5`.
 
-## [0.2.4] - 2026-09-19
+## [0.2.4] - 2026-07-08
 
-### Added
+### Changed
 
-- Wayland portal restore tokens are surfaced to callers through
-  `CaptureSession::restore_token()`, so a later session can skip the permission
-  dialog.
+- Banner artwork and aspect ratio. No library changes.
 
-## [0.2.2] - 2026-09-18
+## [0.2.2] - 2026-07-08
 
 ### Added
 
 - `VideoFrame::to_tight_bytes()` for consumers that cannot handle stride
   padding.
-- `llms.txt` agent oriented crate reference, and the getting started guide is
-  embedded into the crate level docs so it renders on docs.rs.
+- `llms.txt`, an agent oriented crate reference.
 
-## [0.2.0] - 2026-09-17
+### Changed
+
+- The getting started guide is rewritten around muxing footguns and the audio
+  only path, and embedded into the crate level docs so it renders on docs.rs.
+- README links point at GitHub, and the project mascot was added.
+
+0.2.1 was released in this window and carried only the version bump.
+
+## [0.2.0] - 2026-07-07
 
 ### Added
 
@@ -93,6 +106,11 @@ is compile verified only, since it needs a Windows 11 build exposing
 ## [0.1.1]
 
 Initial published release.
+
+<!--
+0.2.3 exists on crates.io but has no corresponding commit or tag in this
+repository, so it is deliberately left undocumented here.
+-->
 
 [Unreleased]: https://github.com/Itz-Agasta/pinray/compare/v0.2.5...HEAD
 [0.2.5]: https://github.com/Itz-Agasta/pinray/compare/v0.2.4...v0.2.5
