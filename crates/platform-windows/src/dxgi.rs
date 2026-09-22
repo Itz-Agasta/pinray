@@ -4,6 +4,10 @@
 //! capture thread is needed. Frames are only delivered when the desktop
 //! changes; an unchanged desktop surfaces as `PinrayError::Timeout`.
 //!
+//! `frame_rate` is honored by delaying the acquire, not by discarding frames
+//! afterwards: duplication only copies once a frame has been acquired, so a
+//! frame that pacing skips is never produced in the first place.
+//!
 //! Known limitation: duplication does not composite the mouse cursor into
 //! the frame (cursor arrives as separate metadata, which we do not yet
 //! draw). Use the WGC backend when an embedded cursor is required.
@@ -25,6 +29,17 @@ use windows::core::Interface;
 use crate::d3d::{create_d3d_device, qpc_frequency, qpc_to_ns, texture_to_host, win_err};
 use crate::enumerate::DisplayEntry;
 
+/// When the next frame may be acquired. Advances one interval per delivered
+/// frame so the average rate holds even when a frame lands late, and
+/// resynchronizes once the desktop has been quiet for longer than an interval
+/// instead of releasing a catch-up burst.
+fn advance_schedule(previous: Option<Instant>, now: Instant, interval: Duration) -> Instant {
+    match previous {
+        Some(previous) if previous + interval > now => previous + interval,
+        _ => now + interval,
+    }
+}
+
 pub(crate) struct DxgiVideoBackend {
     device: ID3D11Device,
     context: ID3D11DeviceContext,
@@ -34,6 +49,10 @@ pub(crate) struct DxgiVideoBackend {
     crop: Option<Rect>,
     sequence: u64,
     qpc_freq: i64,
+    /// `None` delivers frames as fast as the desktop changes.
+    min_frame_interval: Option<Duration>,
+    /// Earliest instant the next frame may be acquired.
+    next_frame_at: Option<Instant>,
 }
 
 impl DxgiVideoBackend {
@@ -59,6 +78,10 @@ impl DxgiVideoBackend {
             crop: config.crop_rect,
             sequence: 0,
             qpc_freq: qpc_frequency()?,
+            min_frame_interval: config
+                .frame_rate
+                .map(|fps| Duration::from_secs_f64(1.0 / f64::from(fps.max(1)))),
+            next_frame_at: None,
         })
     }
 
@@ -67,7 +90,7 @@ impl DxgiVideoBackend {
             kind: BackendKind::WindowsDxgi,
             supports_audio: false,
             zero_copy: false,
-            notes: "DXGI desktop duplication: display capture only, frames on desktop change, cursor not embedded",
+            notes: "DXGI desktop duplication: display capture only, frames on desktop change, frame_rate-paced, cursor not embedded",
         }
     }
 
@@ -88,6 +111,7 @@ impl VideoBackend for DxgiVideoBackend {
     fn start(&mut self) -> Result<()> {
         if self.duplication.is_none() {
             self.recreate_duplication()?;
+            self.next_frame_at = None;
             debug!("dxgi duplication started");
         }
         Ok(())
@@ -95,12 +119,25 @@ impl VideoBackend for DxgiVideoBackend {
 
     fn stop(&mut self) -> Result<()> {
         self.duplication = None;
+        self.next_frame_at = None;
         debug!("dxgi duplication stopped");
         Ok(())
     }
 
     fn next_event(&mut self, timeout: Option<Duration>) -> Result<CaptureEvent> {
         let deadline = timeout.map(|t| Instant::now() + t);
+
+        // Hold off the acquire until the frame is due. Waiting costs nothing
+        // here, where acquiring early would copy a frame only to throw it away.
+        if let Some(next_frame_at) = self.next_frame_at {
+            if deadline.is_some_and(|deadline| next_frame_at > deadline) {
+                return Err(PinrayError::Timeout(timeout.unwrap_or_default()));
+            }
+            let now = Instant::now();
+            if next_frame_at > now {
+                std::thread::sleep(next_frame_at - now);
+            }
+        }
 
         loop {
             let wait_ms = match deadline {
@@ -166,6 +203,13 @@ impl VideoBackend for DxgiVideoBackend {
             let _ = unsafe { duplication.ReleaseFrame() };
             let copy = copy?;
 
+            if let Some(interval) = self.min_frame_interval {
+                let now = Instant::now();
+                // Advance the schedule by one interval, resynchronizing if the
+                // desktop went quiet for longer than that.
+                self.next_frame_at = Some(advance_schedule(self.next_frame_at, now, interval));
+            }
+
             let sequence = self.sequence;
             self.sequence += 1;
 
@@ -181,5 +225,100 @@ impl VideoBackend for DxgiVideoBackend {
                 damage: None,
             }));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::advance_schedule;
+    use std::time::{Duration, Instant};
+
+    const INTERVAL: Duration = Duration::from_millis(100);
+
+    #[test]
+    fn a_frame_arriving_late_keeps_the_grid() {
+        // Acquiring waits for the next desktop change, so frames land a little
+        // after their deadline. Resetting the schedule to that arrival would
+        // stretch every period by the wait and under-deliver.
+        let base = Instant::now();
+        let next = advance_schedule(Some(base), base + Duration::from_millis(5), INTERVAL);
+        assert_eq!(next, base + INTERVAL);
+    }
+
+    #[test]
+    fn a_quiet_desktop_resynchronizes_instead_of_bursting() {
+        let base = Instant::now();
+        let woke = base + Duration::from_millis(350);
+        assert_eq!(
+            advance_schedule(Some(base), woke, INTERVAL),
+            woke + INTERVAL
+        );
+    }
+
+    #[test]
+    fn the_first_frame_starts_the_schedule() {
+        let base = Instant::now();
+        assert_eq!(advance_schedule(None, base, INTERVAL), base + INTERVAL);
+    }
+
+    /// Drives the scheduler against a desktop changing every `change_ms` and
+    /// returns how many frames come out.
+    fn delivered(change_ms: u64, requested: u64, secs: u64) -> u64 {
+        let interval = Duration::from_nanos(1_000_000_000 / requested);
+        let change = Duration::from_millis(change_ms);
+        let base = Instant::now();
+        let end = base + Duration::from_secs(secs);
+
+        let (mut now, mut deadline, mut frames) = (base, None::<Instant>, 0u64);
+        while now < end {
+            // Sleep until due, then wait for the next change at or after that.
+            let ready = deadline.map_or(now, |d| d.max(now));
+            let waited = (ready - base).as_nanos() / change.as_nanos();
+            let mut arrival = base + change * (waited as u32);
+            if arrival < ready {
+                arrival += change;
+            }
+            now = arrival;
+            frames += 1;
+            deadline = Some(advance_schedule(deadline, now, interval));
+        }
+        frames
+    }
+
+    fn delivered_fps(change_ms: u64, requested: u64, secs: u64) -> f64 {
+        delivered(change_ms, requested, secs) as f64 / secs as f64
+    }
+
+    #[test]
+    fn pacing_never_delivers_faster_than_requested() {
+        // A desktop changing at 60 Hz, throttled to a range of rates. The one
+        // extra frame is the one that starts the schedule.
+        let secs = 20;
+        for requested in [1, 2, 5, 10, 15, 24, 30, 50] {
+            let frames = delivered(16, requested, secs);
+            assert!(
+                frames <= requested * secs + 1,
+                "requested {requested} fps over {secs}s: {frames} frames, cap {}",
+                requested * secs + 1
+            );
+        }
+    }
+
+    #[test]
+    fn pacing_holds_the_requested_rate_when_the_desktop_is_fast_enough() {
+        for requested in [1, 2, 5, 10, 15, 30] {
+            let got = delivered_fps(16, requested, 20);
+            assert!(
+                (got - requested as f64).abs() / (requested as f64) < 0.1,
+                "requested {requested} fps, delivered {got:.2}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_slow_desktop_is_not_inflated() {
+        // Changes every 200 ms cannot become 30 fps just because it was asked for.
+        let got = delivered_fps(200, 30, 20);
+        assert!(got <= 5.2, "delivered {got:.2} from a 5 fps desktop");
     }
 }
