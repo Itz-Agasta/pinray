@@ -273,7 +273,7 @@ impl VideoBackend for X11VideoBackend {
         // ZPixmap on a little-endian truecolor visual is effectively BGRx;
         // depth-24 alpha bytes are undefined, so force them opaque.
         if image.depth == 24 {
-            for px in data.chunks_exact_mut(4) {
+            for px in data.as_chunks_mut::<4>().0 {
                 px[3] = 255;
             }
         }
@@ -283,7 +283,7 @@ impl VideoBackend for X11VideoBackend {
         }
 
         if self.pixel_format == PixelFormat::Rgba8888 {
-            for px in data.chunks_exact_mut(4) {
+            for px in data.as_chunks_mut::<4>().0 {
                 px.swap(0, 2);
             }
         }
