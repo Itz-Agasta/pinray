@@ -12,7 +12,7 @@ What each backend can do, what it needs, and where it's honest about limits. `pi
 | System audio | ✅ PipeWire | ✅ PipeWire | ✅ SCKit | ✅ WASAPI | ✅ WASAPI |
 | Cursor embed/hide | ✅ (portal mode) | ✅ (XFixes blend) | ✅ | ❌ cursor never drawn | ✅ |
 | Crop rect | ❌ | ✅ | ⚠️ known issues | ✅ | ✅ |
-| Frame-rate control | negotiated | ✅ paced | ✅ | n/a (on-change) | refresh rate |
+| Frame-rate control | negotiated | ✅ paced | ✅ | ✅ paced (ceiling) | ✅ paced |
 | Timestamp epoch | process-relative | process-relative | boot | boot | boot |
 
 Microphone capture and zero-copy GPU frames are not implemented on any platform yet (`Unsupported` / always host memory).
@@ -42,7 +42,7 @@ Microphone capture and zero-copy GPU frames are not implemented on any platform 
 
 **Requirements:** Windows 10+; WGC needs 10 1903+. No build-time extras.
 
-- **DXGI Desktop Duplication (default for displays):** frames only when the desktop *changes* - an idle desktop yields `Timeout`, which is expected. The cursor is never drawn into DXGI frames (arrives as metadata pinray doesn't composite yet); use WGC when you need the cursor. On duplication denial (secure desktop, session policy) `Auto` falls back to WGC at build time.
+- **DXGI Desktop Duplication (default for displays):** frames only when the desktop *changes* - an idle desktop yields `Timeout`, which is expected. Paced to `frame_rate` (default 60; `.frame_rate(None)` delivers every change) by holding off the acquire until the frame is due, so a skipped frame is never copied. A desktop changing more slowly than the requested rate still delivers at its own rate; pacing is a ceiling, not a floor. The cursor is never drawn into DXGI frames (arrives as metadata pinray doesn't composite yet); use WGC when you need the cursor. On duplication denial (secure desktop, session policy) `Auto` falls back to WGC at build time.
 - **WGC (default for windows, fallback for displays):** paced to `frame_rate` (default 60; pass `.frame_rate(None)` to stream at full display refresh), cursor toggle supported, the yellow capture border is suppressed where the OS allows. Pacing is applied inside the arrival callback *before* the GPU->CPU staging copy, so throttled frames cost nothing but a timestamp read; on Windows 11 builds that expose `IGraphicsCaptureSession5` the compositor is additionally asked to throttle at the source via `MinUpdateInterval`. Frames skipped by pacing are not reported as `Gap`/`Dropped` - they were requested. Pacing can only select whole vblanks, so where the refresh rate is not an integer multiple of the requested rate (60 fps on a 90 Hz panel, say) the spacing between delivered frames alternates while the average holds at the requested rate.
 - **Audio:** WASAPI shared-mode loopback of the default render endpoint; format follows the device mix (typically 48 kHz stereo F32). Pairs with either backend or runs standalone.
 - Timestamps are QPC-based (boot-relative) across video and audio.
