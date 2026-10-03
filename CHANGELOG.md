@@ -6,13 +6,51 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-10-03
+
+Wayland `frame_rate` and `queue_depth` now actually do something, and dropped
+frames show up as gaps in `sequence` on every backend.
+
 ### Fixed
 
-- **macOS frame drops show up in `sequence`** ([#13]). The video and audio
-  counters only advanced when a frame made it into the `queue_depth` channel,
-  so frames dropped on a full queue left no gap and callers could not tell
-  anything was lost. They now advance for every extracted frame, matching the
-  other backends and the `VideoFrame::sequence` contract.
+- **Wayland `frame_rate` reaches the portal** ([#12], from [#11]). Screencast
+  portals offer a variable `framerate` (0/1) and pace by `maxFramerate`, but
+  pinray only capped `framerate`, so the limit never applied. It now goes into
+  `maxFramerate`. `frame_rate(None)` is uncapped and lands on the portal's own
+  maximum, instead of silently becoming 60.
+- **Wayland honors `queue_depth`** ([#12]). The event channel was unbounded,
+  so `queue_depth` did nothing and memory could grow without limit behind a
+  slow consumer. It is now bounded and drops the newest frame when full, like
+  the other backends.
+- **Wayland frames are no longer batched** ([#12]). Frames sat in a queue that
+  was only drained every 20 ms, adding up to 20 ms of latency and delivering
+  them in bursts. They are now sent straight from the PipeWire callback.
+- **macOS frame drops show up in `sequence`** ([#14], tracked in [#13]). The
+  video and audio counters only advanced when a frame made it into the
+  `queue_depth` channel, so frames dropped on a full queue left no gap and
+  callers could not tell anything was lost. They now advance for every
+  extracted frame, matching the other backends.
+
+### Behavior change
+
+On Wayland, the default `frame_rate: Some(60)` is now passed to the portal as
+a maximum. Portals that honor `maxFramerate` will cap a faster display at 60
+fps where earlier versions ran at whatever the portal produced. Pass
+`.frame_rate(None)` for uncapped. How strictly the cap is enforced is up to the
+portal: xdg-desktop-portal-hyprland, for example, overshoots it (about 40 fps
+delivered for a 30 fps cap).
+
+Wayland capture rate itself is set by the compositor's portal, which only
+produces a frame when the screen content changes. Capture below the refresh
+rate on a busy screen is usually the portal, not pinray. See [#11] for the
+measurements.
+
+### Also
+
+- `VideoFrame::sequence` and the getting-started guide now describe the
+  counter correctly: it advances per captured frame, including frames dropped
+  on a full queue, and frames skipped by `frame_rate` pacing are not counted.
+- `docs/platforms.md` explains how the Wayland frame cadence works.
 
 ## [0.2.5] - 2026-09-22
 
@@ -120,7 +158,8 @@ Initial published release.
 repository, so it is deliberately left undocumented here.
 -->
 
-[Unreleased]: https://github.com/Itz-Agasta/pinray/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/Itz-Agasta/pinray/compare/v0.2.6...HEAD
+[0.2.6]: https://github.com/Itz-Agasta/pinray/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/Itz-Agasta/pinray/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/Itz-Agasta/pinray/compare/v0.2.2...v0.2.4
 [0.2.2]: https://github.com/Itz-Agasta/pinray/compare/v0.2.0...v0.2.2
@@ -129,4 +168,7 @@ repository, so it is deliberately left undocumented here.
 [#8]: https://github.com/Itz-Agasta/pinray/pull/8
 [#9]: https://github.com/Itz-Agasta/pinray/issues/9
 [#10]: https://github.com/Itz-Agasta/pinray/pull/10
+[#11]: https://github.com/Itz-Agasta/pinray/issues/11
+[#12]: https://github.com/Itz-Agasta/pinray/pull/12
 [#13]: https://github.com/Itz-Agasta/pinray/issues/13
+[#14]: https://github.com/Itz-Agasta/pinray/pull/14
