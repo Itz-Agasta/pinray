@@ -1,0 +1,21 @@
+crates/core/src/frame.rs
+  s_6740efec5f0e50::t_4a66c2c44b4249 97-99
+crates/pinray/docs/getting-started.md
+  s_6740efec5f0e50::t_4a66c2c44b4249 130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8ebcc002ba768e666d6221025c6838c9f5cfcde2",
+  "prompts": {},
+  "sessions": {
+    "s_6740efec5f0e50": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58e9b276-5df0-4f91-81ff-b2208851b3d2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Itz-Agasta <rupamgolui69@gmail.com>"
+    }
+  }
+}
