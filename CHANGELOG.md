@@ -6,6 +6,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **macOS frame drops show up in `sequence`** ([#13]). The video and audio
+  counters only advanced when a frame made it into the `queue_depth` channel,
+  so frames dropped on a full queue left no gap and callers could not tell
+  anything was lost. They now advance for every extracted frame, matching the
+  other backends and the `VideoFrame::sequence` contract.
+
 ## [0.2.5] - 2026-09-22
 
 `frame_rate` is now honored on Windows. Both backends previously ignored it, so
@@ -121,3 +129,4 @@ repository, so it is deliberately left undocumented here.
 [#8]: https://github.com/Itz-Agasta/pinray/pull/8
 [#9]: https://github.com/Itz-Agasta/pinray/issues/9
 [#10]: https://github.com/Itz-Agasta/pinray/pull/10
+[#13]: https://github.com/Itz-Agasta/pinray/issues/13
