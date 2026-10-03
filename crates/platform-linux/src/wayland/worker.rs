@@ -1,12 +1,12 @@
 //! PipeWire main-loop worker thread for Wayland video capture.
 //!
 //! Connects to PipeWire over the portal-provided fd, negotiates a raw video
-//! stream on the screencast node, and forwards frames through a queue into
-//! the backend's event channel. Start/stop/terminate arrive over a control
-//! channel and are polled between loop iterations.
+//! stream on the screencast node, and sends frames straight from the
+//! `process` callback into the backend's bounded event channel (dropping the
+//! newest frame when it is full, like the other backends). Start/stop/terminate
+//! arrive over a control channel and are polled between loop iterations.
 
 use std::{
-    collections::VecDeque,
     sync::{Arc, Mutex, mpsc},
     time::Duration,
 };
@@ -65,9 +65,9 @@ pub(super) fn run_video_loop(
     node_id: u32,
     portal_size: Option<VideoSize>,
     desired_format: PixelFormat,
-    frame_rate: u32,
+    frame_rate: Option<u32>,
     control_rx: mpsc::Receiver<ControlMessage>,
-    event_tx: mpsc::Sender<CaptureEvent>,
+    event_tx: mpsc::SyncSender<CaptureEvent>,
 ) -> Result<()> {
     pw::init();
 
@@ -91,7 +91,6 @@ pub(super) fn run_video_loop(
         .register();
 
     let runtime = Arc::new(Mutex::new(RuntimeState::default()));
-    let queue = Arc::new(Mutex::new(VecDeque::<CaptureEvent>::new()));
 
     let stream_properties = properties! {
             *pw::keys::MEDIA_TYPE => "Video",
@@ -139,7 +138,6 @@ pub(super) fn run_video_loop(
         })
         .process({
             let runtime = Arc::clone(&runtime);
-            let queue = Arc::clone(&queue);
             move |stream, user_data| {
                 let Ok(mut state) = runtime.lock() else {
                     return;
@@ -191,9 +189,9 @@ pub(super) fn run_video_loop(
                 };
                 state.sequence += 1;
 
-                if let Ok(mut queue) = queue.lock() {
-                    queue.push_back(CaptureEvent::Video(frame));
-                }
+                // Runs on the PipeWire data thread: never block here. A full
+                // queue drops the frame, leaving a gap in `sequence`.
+                let _ = event_tx.try_send(CaptureEvent::Video(frame));
             }
         })
         .register()
@@ -255,14 +253,6 @@ pub(super) fn run_video_loop(
                 }
                 ControlMessage::Terminate => {
                     terminate = true;
-                }
-            }
-        }
-
-        if let Ok(mut queue) = queue.lock() {
-            while let Some(event) = queue.pop_front() {
-                if event_tx.send(event).is_err() {
-                    return Ok(());
                 }
             }
         }
