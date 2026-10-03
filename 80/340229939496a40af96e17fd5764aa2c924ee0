@@ -1,0 +1,31 @@
+crates/platform-linux/Cargo.toml
+  s_6740efec5f0e50::t_2872e74671e099 21
+crates/platform-macos/Cargo.toml
+  s_6740efec5f0e50::t_2872e74671e099 19
+Cargo.toml
+  s_6740efec5f0e50::t_2872e74671e099 17
+CHANGELOG.md
+  s_6740efec5f0e50::t_2b0dd004dbf471 9-13,16-53,161-162,171-172,174
+crates/platform-windows/Cargo.toml
+  s_6740efec5f0e50::t_2872e74671e099 19
+crates/pinray/Cargo.toml
+  s_6740efec5f0e50::t_2872e74671e099 21,24,27,30
+Cargo.lock
+  s_6740efec5f0e50::t_1c9f56f34a61db 872,883,891,903,919
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "80340229939496a40af96e17fd5764aa2c924ee0",
+  "prompts": {},
+  "sessions": {
+    "s_6740efec5f0e50": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58e9b276-5df0-4f91-81ff-b2208851b3d2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Itz-Agasta <rupamgolui69@gmail.com>"
+    }
+  }
+}
