@@ -34,8 +34,8 @@ pub(super) enum RawEvent {
 pub(super) struct OutputIvars {
     event_tx: mpsc::SyncSender<RawEvent>,
     active: Arc<AtomicBool>,
-    // Separate per-stream counters, advanced only when a frame is actually
-    // delivered, so consumers can detect drops per stream.
+    // Separate per-stream counters, advanced for every extracted frame (even
+    // ones dropped on a full queue), so consumers can detect drops per stream.
     video_sequence: AtomicU64,
     audio_sequence: AtomicU64,
     desired_pixel_format: PixelFormat,
@@ -65,22 +65,23 @@ define_class!(
 
             // This callback runs on one serial GCD queue, so the
             // load-then-store on the sequence counters is race-free.
+            // Counters advance for every extracted frame, even when the
+            // queue is full and `try_send` drops it, so drops show as gaps.
             match output_type {
                 SCStreamOutputType::Screen => {
                     let seq = ivars.video_sequence.load(Ordering::Relaxed);
                     if let Some(frame) =
                         extract_video_frame(sample_buffer, seq, ivars.desired_pixel_format)
-                        && ivars.event_tx.try_send(RawEvent::Video(frame)).is_ok()
                     {
                         ivars.video_sequence.store(seq + 1, Ordering::Relaxed);
+                        let _ = ivars.event_tx.try_send(RawEvent::Video(frame));
                     }
                 }
                 SCStreamOutputType::Audio if ivars.capture_audio => {
                     let seq = ivars.audio_sequence.load(Ordering::Relaxed);
-                    if let Some(frame) = extract_audio_frame(sample_buffer, seq)
-                        && ivars.event_tx.try_send(RawEvent::Audio(frame)).is_ok()
-                    {
+                    if let Some(frame) = extract_audio_frame(sample_buffer, seq) {
                         ivars.audio_sequence.store(seq + 1, Ordering::Relaxed);
+                        let _ = ivars.event_tx.try_send(RawEvent::Audio(frame));
                     }
                 }
                 _ => {}
