@@ -106,9 +106,9 @@ impl WaylandVideoBackend {
         }
 
         let (control_tx, control_rx) = mpsc::channel();
-        let (event_tx, event_rx) = mpsc::channel();
+        let (event_tx, event_rx) = mpsc::sync_channel(config.queue_depth as usize);
         let desired_format = config.pixel_format;
-        let frame_rate = config.frame_rate.unwrap_or(60);
+        let frame_rate = config.frame_rate;
         let stream_size = stream
             .width
             .zip(stream.height)

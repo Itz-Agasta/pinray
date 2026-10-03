@@ -16,16 +16,24 @@ use pinray_core::{PixelFormat, Result};
 
 use super::{VideoSize, platform_error};
 
+/// Upper bound offered for `maxFramerate` when the caller sets no frame rate.
+const UNCAPPED_FRAME_RATE: u32 = 1000;
+
 /// Build PipeWire stream format parameters for the video capture stream.
 ///
 /// We offer a single `EnumFormat` param with BGRA/BGRx/RGBA/RGBx as a Choice.
 /// The compositor's screencast node intersects this with its own advertised
 /// formats and picks one. No modifier property -- the compositor handles format
 /// conversion internally.
+///
+/// Screencast producers advertise a variable `framerate` (0/1) and pace by
+/// `maxFramerate`, so the caller's limit goes into `maxFramerate`; a cap on
+/// `framerate` alone never constrains them.
 pub(super) fn build_stream_params(
-    frame_rate: u32,
+    frame_rate: Option<u32>,
     source_size: Option<VideoSize>,
 ) -> Result<Vec<Vec<u8>>> {
+    let max_rate = frame_rate.unwrap_or(UNCAPPED_FRAME_RATE);
     let default_size = source_size.unwrap_or(VideoSize {
         width: 1920,
         height: 1080,
@@ -69,13 +77,25 @@ pub(super) fn build_stream_params(
             Choice,
             Range,
             Fraction,
-            pw::spa::utils::Fraction {
-                num: frame_rate,
-                denom: 1
-            },
+            pw::spa::utils::Fraction { num: 0, denom: 1 },
             pw::spa::utils::Fraction { num: 0, denom: 1 },
             pw::spa::utils::Fraction {
-                num: frame_rate,
+                num: max_rate,
+                denom: 1
+            }
+        ),
+        pw::spa::pod::property!(
+            FormatProperties::VideoMaxFramerate,
+            Choice,
+            Range,
+            Fraction,
+            pw::spa::utils::Fraction {
+                num: max_rate,
+                denom: 1
+            },
+            pw::spa::utils::Fraction { num: 1, denom: 1 },
+            pw::spa::utils::Fraction {
+                num: max_rate,
                 denom: 1
             }
         ),
@@ -156,6 +176,40 @@ mod tests {
         let (fmt, data) = normalize_frame(VideoFormat::RGBx, &[1, 2, 3, 4], PixelFormat::Bgra8888);
         assert_eq!(fmt, PixelFormat::Bgra8888);
         assert_eq!(data, vec![3, 2, 1, 4]);
+    }
+
+    fn max_framerate_range(frame_rate: Option<u32>) -> (u32, u32, u32) {
+        use pw::spa::{
+            pod::{ChoiceValue, Value, deserialize::PodDeserializer},
+            utils::{Choice, ChoiceEnum},
+        };
+        let params = build_stream_params(frame_rate, None).unwrap();
+        let (_, Value::Object(object)) = PodDeserializer::deserialize_any_from(&params[0]).unwrap()
+        else {
+            panic!("format param is not an object");
+        };
+        let property = object
+            .properties
+            .iter()
+            .find(|p| p.key == FormatProperties::VideoMaxFramerate.as_raw())
+            .expect("maxFramerate missing");
+        let Value::Choice(ChoiceValue::Fraction(Choice(
+            _,
+            ChoiceEnum::Range { default, min, max },
+        ))) = &property.value
+        else {
+            panic!("maxFramerate is not a fraction range");
+        };
+        (default.num, min.num, max.num)
+    }
+
+    #[test]
+    fn frame_rate_caps_max_framerate() {
+        assert_eq!(max_framerate_range(Some(30)), (30, 1, 30));
+        assert_eq!(
+            max_framerate_range(None),
+            (UNCAPPED_FRAME_RATE, 1, UNCAPPED_FRAME_RATE)
+        );
     }
 
     #[test]
