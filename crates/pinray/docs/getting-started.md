@@ -127,7 +127,7 @@ Include that output in bug reports - backend selection differs per machine.
 ## Timestamps, sequences, gaps
 
 - `stream_time_ns` is monotonic and comparable between a session's audio and video streams. The epoch differs per platform (boot time on macOS/Windows, process-relative on Linux) - compute deltas, don't compare across machines.
-- `sequence` increments once per delivered frame per stream; a jump means the consumer fell behind and frames were dropped.
+- `sequence` increments once per captured frame per stream, including frames dropped because the consumer's queue was full; a jump means the consumer fell behind and frames were dropped. Frames skipped by `frame_rate` pacing are not counted.
 - `CaptureEvent::Gap` reports drops and backend restarts explicitly.
 
 ## Muxing frames into a video file

@@ -94,8 +94,9 @@ pub struct VideoFrame {
     /// The epoch is platform-dependent (boot time on macOS/Windows,
     /// process-relative on Linux).
     pub stream_time_ns: i64,
-    /// Per-stream counter advanced once per delivered frame; a jump means
-    /// frames were dropped.
+    /// Per-stream counter advanced once per captured frame, including frames
+    /// dropped because the consumer's queue was full; a jump means frames
+    /// were dropped. Frames skipped by `frame_rate` pacing are not counted.
     pub sequence: u64,
     pub width: u32,
     pub height: u32,
