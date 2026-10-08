@@ -31,7 +31,7 @@ Microphone capture and zero-copy GPU frames are not implemented on any platform 
 
 ## macOS
 
-**Requirements:** macOS 12.3+ (ScreenCaptureKit). No build-time extras.
+**Requirements:** macOS 13.0+ (ScreenCaptureKit; 12.x is not supported because the stream audio settings are 13.0+). No build-time extras.
 
 **Permission:** Screen Recording under System Settings → Privacy & Security. The first `enumerate_sources()` or session build triggers the prompt; a fresh grant requires relaunching the app (macOS behavior, not pinray's).
 
