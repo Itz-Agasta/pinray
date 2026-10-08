@@ -1,0 +1,20 @@
+crates/platform-macos/src/lib.rs
+  s_0d3d9a102d829b::t_ebbcd4fa5aeeaf 9,13-30,32,71-74
+  s_0d3d9a102d829b::t_71011748c007cd 75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "951966be94f15c7aac975424006184f80d402299",
+  "prompts": {},
+  "sessions": {
+    "s_0d3d9a102d829b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "21da0858-9e6e-48a0-837b-8cd224beb98a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Itz-Agasta <rupamgolui69@gmail.com>"
+    }
+  }
+}
