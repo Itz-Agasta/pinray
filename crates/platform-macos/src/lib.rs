@@ -6,12 +6,30 @@ mod content;
 mod permissions;
 
 use pinray_core::{
-    BackendBundle, BackendInfo, BackendKind, BackendPreference, CaptureSource, Result,
+    BackendBundle, BackendInfo, BackendKind, BackendPreference, CaptureSource, PinrayError, Result,
     SessionConfig,
 };
 
+/// ScreenCaptureKit itself is 12.3+, but the stream configuration sends audio
+/// setters that only exist on 13.0+ and abort with an unrecognized selector below it.
+#[cfg(target_os = "macos")]
+fn os_supported() -> bool {
+    objc2_foundation::NSProcessInfo::processInfo().isOperatingSystemAtLeastVersion(
+        objc2_foundation::NSOperatingSystemVersion {
+            majorVersion: 13,
+            minorVersion: 0,
+            patchVersion: 0,
+        },
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn os_supported() -> bool {
+    false
+}
+
 pub fn available_backends() -> Vec<BackendInfo> {
-    if cfg!(target_os = "macos") {
+    if os_supported() {
         vec![BackendInfo {
             kind: BackendKind::MacScreenCaptureKit,
             supports_audio: true,
@@ -49,6 +67,11 @@ pub fn try_resolve(config: &SessionConfig) -> Result<Option<BackendBundle>> {
     );
     if !applies {
         return Ok(None);
+    }
+    if !os_supported() {
+        return Err(PinrayError::BackendUnavailable(
+            "ScreenCaptureKit backend requires macOS 13.0+".into(),
+        ));
     }
 
     #[cfg(target_os = "macos")]
