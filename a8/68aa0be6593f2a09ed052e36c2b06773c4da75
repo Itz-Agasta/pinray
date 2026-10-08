@@ -1,0 +1,19 @@
+Cargo.toml
+  s_6740efec5f0e50::t_8409429a0ab9a5 3-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a868aa0be6593f2a09ed052e36c2b06773c4da75",
+  "prompts": {},
+  "sessions": {
+    "s_6740efec5f0e50": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58e9b276-5df0-4f91-81ff-b2208851b3d2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Itz-Agasta <rupamgolui69@gmail.com>"
+    }
+  }
+}
