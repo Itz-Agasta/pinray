@@ -1,0 +1,25 @@
+README.md
+  s_0d3d9a102d829b::t_1a38d79bca608f 46,92
+crates/platform-macos/src/capture/mod.rs
+  s_0d3d9a102d829b::t_1a38d79bca608f 1
+docs/platforms.md
+  s_0d3d9a102d829b::t_1a38d79bca608f 34
+crates/platform-macos/src/lib.rs
+  s_0d3d9a102d829b::t_1a38d79bca608f 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b9357da537fd4adfe1c7dd11191495eabbb54904",
+  "prompts": {},
+  "sessions": {
+    "s_0d3d9a102d829b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "21da0858-9e6e-48a0-837b-8cd224beb98a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Itz-Agasta <rupamgolui69@gmail.com>"
+    }
+  }
+}
