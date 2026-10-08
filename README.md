@@ -43,7 +43,7 @@ pinray is a capture **infrastructure** crate: it talks to each OS's native captu
 | ----------------- | ------------------------------ | ------------------- | ------------------------------ |
 | **Linux** Wayland | ✅ portal + PipeWire streaming | ✅ PipeWire         | restore tokens skip the dialog |
 | **Linux** X11     | ✅ paced polling (GetImage)    | ✅ PipeWire         | XFixes cursor blend            |
-| **macOS** 12.3+   | ✅ ScreenCaptureKit            | ✅ ScreenCaptureKit | display + window capture       |
+| **macOS** 13.0+   | ✅ ScreenCaptureKit            | ✅ ScreenCaptureKit | display + window capture       |
 | **Windows** 10+   | ✅ DXGI + WGC                  | ✅ WASAPI loopback  | DXGI→WGC auto-fallback         |
 
 Full matrix with per-backend limitations: [docs/platforms.md](https://github.com/Itz-Agasta/pinray/blob/main/docs/platforms.md).
@@ -89,7 +89,7 @@ Pick specific displays/windows with `pinray::enumerate_sources()`, capture audio
 | Platform | Build                           | Runtime                                  |
 | -------- | ------------------------------- | ---------------------------------------- |
 | Linux    | `libpipewire-0.3-dev` + `clang` | PipeWire; XDG portal for Wayland video   |
-| macOS    | -                               | macOS 12.3+, Screen Recording permission |
+| macOS    | -                               | macOS 13.0+, Screen Recording permission |
 | Windows  | -                               | Windows 10+ (WGC needs 1903+)            |
 
 ## Examples

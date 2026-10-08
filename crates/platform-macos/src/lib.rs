@@ -16,7 +16,7 @@ pub fn available_backends() -> Vec<BackendInfo> {
             kind: BackendKind::MacScreenCaptureKit,
             supports_audio: true,
             zero_copy: false,
-            notes: "ScreenCaptureKit (macOS 12.3+): display/window capture with optional system audio",
+            notes: "ScreenCaptureKit (macOS 13.0+): display/window capture with optional system audio",
         }]
     } else {
         Vec::new()
