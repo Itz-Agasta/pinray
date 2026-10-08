@@ -1,4 +1,4 @@
-//! ScreenCaptureKit video backend (macOS 12.3+).
+//! ScreenCaptureKit video backend (macOS 13.0+).
 //!
 //! Push-model: SCKit delivers `CMSampleBuffer`s over XPC onto a serial GCD
 //! queue, where `SckOutput` (see `output.rs`) extracts host-memory frames
