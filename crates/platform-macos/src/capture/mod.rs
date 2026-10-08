@@ -165,7 +165,7 @@ pub fn build_backend(config: &SessionConfig) -> Result<BackendBundle> {
     let content = get_shareable_content()?;
 
     let filter = build_content_filter(&content, config)?;
-    let stream_cfg = build_stream_configuration(config, &content, supports_audio)?;
+    let stream_cfg = build_stream_configuration(config, &content, &filter, supports_audio)?;
 
     let (event_tx, event_rx) = mpsc::sync_channel::<RawEvent>(config.queue_depth as usize);
 
