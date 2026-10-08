@@ -17,24 +17,31 @@ use pinray_core::{CursorMode, PinrayError, Result, SessionConfig, VideoCaptureTa
 pub(super) fn build_content_filter(
     content: &SCShareableContent,
     config: &SessionConfig,
-) -> Result<Retained<SCContentFilter>> {
+) -> Result<(Retained<SCContentFilter>, (u32, u32))> {
     match &config.video_target {
         None | Some(VideoCaptureTarget::Display(_)) => {
             let display = find_display(content, config)?;
             let excluded = objc2_foundation::NSArray::<SCWindow>::new();
-            Ok(unsafe {
+            let filter = unsafe {
                 SCContentFilter::initWithDisplay_excludingWindows(
                     SCContentFilter::alloc(),
                     &display,
                     &excluded,
                 )
-            })
+            };
+            // Keep the existing 2x display sizing for this window-only fix.
+            let width = unsafe { display.width() } as u32;
+            let height = unsafe { display.height() } as u32;
+            let output_size = ((width * 2).max(2) & !1, (height * 2).max(2) & !1);
+            Ok((filter, output_size))
         }
         Some(VideoCaptureTarget::Window(source_id)) => {
             let win = find_window(content, &source_id.0)?;
-            Ok(unsafe {
+            let filter = unsafe {
                 SCContentFilter::initWithDesktopIndependentWindow(SCContentFilter::alloc(), &win)
-            })
+            };
+            let output_size = window_dimensions(content, &filter, &win);
+            Ok((filter, output_size))
         }
     }
 }
@@ -83,26 +90,14 @@ fn find_window(content: &SCShareableContent, id_str: &str) -> Result<Retained<SC
 
 pub(super) fn build_stream_configuration(
     config: &SessionConfig,
-    content: &SCShareableContent,
-    filter: &SCContentFilter,
+    output_size: (u32, u32),
     capture_audio: bool,
-) -> Result<Retained<SCStreamConfiguration>> {
+) -> Retained<SCStreamConfiguration> {
     let cfg = unsafe { SCStreamConfiguration::new() };
 
     // Choose the output size once. Resizing or moving a window later does not
     // change the frame dimensions during this capture session.
-    let (out_w, out_h) = match &config.video_target {
-        Some(VideoCaptureTarget::Window(source_id)) => {
-            window_dimensions(content, filter, &source_id.0)?
-        }
-        _ => {
-            let (display_w, display_h, scale) = display_dimensions(content, config);
-            (
-                (display_w * scale).max(2) & !1,
-                (display_h * scale).max(2) & !1,
-            )
-        }
-    };
+    let (out_w, out_h) = output_size;
 
     unsafe {
         cfg.setWidth(out_w as usize);
@@ -149,14 +144,14 @@ pub(super) fn build_stream_configuration(
         unsafe { cfg.setSourceRect(cg_rect) };
     }
 
-    Ok(cfg)
+    cfg
 }
 
 fn window_dimensions(
     content: &SCShareableContent,
     filter: &SCContentFilter,
-    window_id: &str,
-) -> Result<(u32, u32)> {
+    window: &SCWindow,
+) -> (u32, u32) {
     // These selectors were added in macOS 14. Guard both before sending either
     // message so the backend remains usable on macOS 13.
     if filter.respondsToSelector(sel!(contentRect))
@@ -164,10 +159,9 @@ fn window_dimensions(
     {
         let size = unsafe { filter.contentRect() }.size;
         let scale = unsafe { filter.pointPixelScale() } as f64;
-        return Ok(pixel_dimensions(size, scale));
+        return pixel_dimensions(size, scale);
     }
 
-    let window = find_window(content, window_id)?;
     let frame = unsafe { window.frame() };
     let displays = unsafe { content.displays() };
     let display = displays
@@ -189,7 +183,7 @@ fn window_dimensions(
         .filter(|scale| scale.is_finite() && *scale > 0.0)
         .unwrap_or(1.0);
 
-    Ok(pixel_dimensions(frame.size, scale))
+    pixel_dimensions(frame.size, scale)
 }
 
 fn contains_window_center(display: CGRect, window: CGRect) -> bool {
@@ -207,33 +201,6 @@ fn pixel_dimensions(size: CGSize, scale: f64) -> (u32, u32) {
         ((size.width * scale) as u32).max(2) & !1,
         ((size.height * scale) as u32).max(2) & !1,
     )
-}
-
-fn display_dimensions(content: &SCShareableContent, config: &SessionConfig) -> (u32, u32, u32) {
-    let displays = unsafe { content.displays() };
-
-    let display = if let Some(VideoCaptureTarget::Display(source_id)) = &config.video_target {
-        if source_id.0 != "auto" {
-            if let Ok(id) = source_id.0.parse::<u32>() {
-                displays.iter().find(|d| unsafe { d.displayID() } == id)
-            } else {
-                displays.firstObject()
-            }
-        } else {
-            displays.firstObject()
-        }
-    } else {
-        displays.firstObject()
-    };
-
-    match display {
-        Some(d) => {
-            let w = unsafe { d.width() } as u32;
-            let h = unsafe { d.height() } as u32;
-            (w, h, 2) // 2× retina default; exact scale needs CGDisplayMode
-        }
-        None => (1920, 1080, 1),
-    }
 }
 
 #[cfg(test)]
