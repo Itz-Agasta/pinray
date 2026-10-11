@@ -37,7 +37,8 @@ Microphone capture and zero-copy GPU frames are not implemented on any platform 
 
 - Display and window capture, cursor toggle, system audio - all through one `SCStream` (audio arrives via `next_event`, `BackendBundle`-level audio is unified with video).
 - Frames are BGRA host copies; requesting `Rgba8888` swizzles on the CPU (SCKit streams don't do RGBA natively).
-- **Known issues** (tracked in `docs2/macos.md`, need real-hardware verification): window capture output is currently display-sized (letterboxed), crop rect has a points-vs-pixels mismatch on retina, audio channel layout may be planar rather than interleaved, HiDPI scale is assumed 2×.
+- Window capture uses the window's initial size in pixels (rounded down to even dimensions, minimum 2×2). On macOS 14+ this comes from the content filter; on macOS 13 it uses the window frame and the scale of the display containing its center, falling back to the main display or 1×. Output dimensions stay fixed for the session, including after a window resize or move to another display.
+- **Known issues** (tracked in `docs2/macos.md`, need real-hardware verification): crop rect has a points-vs-pixels mismatch on retina, audio channel layout may be planar rather than interleaved, display capture HiDPI scale is assumed 2×.
 
 ## Windows
 
