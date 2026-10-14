@@ -29,10 +29,13 @@ pub(super) fn build_content_filter(
                     &excluded,
                 )
             };
-            // Keep the existing 2x display sizing for this window-only fix.
-            let width = unsafe { display.width() } as u32;
-            let height = unsafe { display.height() } as u32;
-            let output_size = ((width * 2).max(2) & !1, (height * 2).max(2) & !1);
+            let output_size = filter_dimensions(&filter).unwrap_or_else(|| {
+                let size = CGSize {
+                    width: unsafe { display.width() } as f64,
+                    height: unsafe { display.height() } as f64,
+                };
+                pixel_dimensions(size, display_scale(&display))
+            });
             Ok((filter, output_size))
         }
         Some(VideoCaptureTarget::Window(source_id)) => {
@@ -147,11 +150,7 @@ pub(super) fn build_stream_configuration(
     cfg
 }
 
-fn window_dimensions(
-    content: &SCShareableContent,
-    filter: &SCContentFilter,
-    window: &SCWindow,
-) -> (u32, u32) {
+fn filter_dimensions(filter: &SCContentFilter) -> Option<(u32, u32)> {
     // These selectors were added in macOS 14. Guard both before sending either
     // message so the backend remains usable on macOS 13.
     if filter.respondsToSelector(sel!(contentRect))
@@ -159,7 +158,19 @@ fn window_dimensions(
     {
         let size = unsafe { filter.contentRect() }.size;
         let scale = unsafe { filter.pointPixelScale() } as f64;
-        return pixel_dimensions(size, scale);
+        Some(pixel_dimensions(size, scale))
+    } else {
+        None
+    }
+}
+
+fn window_dimensions(
+    content: &SCShareableContent,
+    filter: &SCContentFilter,
+    window: &SCWindow,
+) -> (u32, u32) {
+    if let Some(size) = filter_dimensions(filter) {
+        return size;
     }
 
     let frame = unsafe { window.frame() };
@@ -175,15 +186,23 @@ fn window_dimensions(
         });
 
     let scale = display
-        .and_then(|display| {
-            let mode = CGDisplayCopyDisplayMode(unsafe { display.displayID() })?;
-            let points = unsafe { display.width() } as f64;
-            Some(CGDisplayMode::pixel_width(Some(&mode)) as f64 / points)
-        })
-        .filter(|scale| scale.is_finite() && *scale > 0.0)
+        .map(|display| display_scale(&display))
         .unwrap_or(1.0);
 
     pixel_dimensions(frame.size, scale)
+}
+
+fn display_scale(display: &SCDisplay) -> f64 {
+    let pixel_width = CGDisplayCopyDisplayMode(unsafe { display.displayID() })
+        .map(|mode| CGDisplayMode::pixel_width(Some(&mode)));
+    pixel_scale(pixel_width, unsafe { display.width() })
+}
+
+fn pixel_scale(pixel_width: Option<usize>, point_width: isize) -> f64 {
+    pixel_width
+        .map(|pixels| pixels as f64 / point_width as f64)
+        .filter(|scale| scale.is_finite() && *scale > 0.0)
+        .unwrap_or(1.0)
 }
 
 fn contains_window_center(display: CGRect, window: CGRect) -> bool {
@@ -216,6 +235,40 @@ mod tests {
     }
 
     #[test]
+    fn display_fallback_size_uses_current_mode_scale() {
+        let size = rect(0.0, 0.0, 1920.0, 1080.0).size;
+        assert_eq!(
+            pixel_dimensions(size, pixel_scale(Some(1920), 1920)),
+            (1920, 1080)
+        );
+        assert_eq!(
+            pixel_dimensions(size, pixel_scale(Some(3840), 1920)),
+            (3840, 2160)
+        );
+        assert_eq!(
+            pixel_dimensions(size, pixel_scale(Some(2880), 1920)),
+            (2880, 1620)
+        );
+        // A scaled "looks like" mode can have a non-integer pixel-to-point ratio.
+        assert_eq!(
+            pixel_dimensions(
+                rect(0.0, 0.0, 1800.0, 1169.0).size,
+                pixel_scale(Some(3024), 1800),
+            ),
+            (3024, 1962)
+        );
+    }
+
+    #[test]
+    fn display_scale_falls_back_when_mode_is_missing_or_invalid() {
+        assert_eq!(pixel_scale(None, 1920), 1.0);
+        assert_eq!(pixel_scale(Some(0), 1920), 1.0);
+        assert_eq!(pixel_scale(Some(1920), 0), 1.0);
+        assert_eq!(pixel_scale(Some(0), 0), 1.0);
+        assert_eq!(pixel_scale(Some(1920), -1920), 1.0);
+    }
+
+    #[test]
     fn window_size_uses_its_own_bounds_at_the_display_scale() {
         let window = rect(200.0, 100.0, 800.0, 600.0);
         assert_eq!(pixel_dimensions(window.size, 1.0), (800, 600));
@@ -233,6 +286,10 @@ mod tests {
         assert_eq!(
             pixel_dimensions(rect(0.0, 0.0, 400.5, 301.5).size, 2.0),
             (800, 602)
+        );
+        assert_eq!(
+            pixel_dimensions(rect(0.0, 0.0, 801.0, 603.0).size, 1.5),
+            (1200, 904)
         );
     }
 
