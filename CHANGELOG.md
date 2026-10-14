@@ -6,6 +6,35 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-10-14
+
+macOS capture now comes out at the right size. Window capture is sized from
+the window, and display capture uses the display's real scale instead of
+assuming 2x. Both fixes were tested on real hardware by @MohammediYunus.
+
+### Fixed
+
+- **macOS window capture is sized from the window** ([#19], fixes [#15]).
+  Window frames were sized to the whole display, so the window got scaled and
+  letterboxed into a display-sized buffer. The output now matches the window's
+  own pixel size at session start.
+- **macOS display capture uses the display's actual scale** ([#21], fixes
+  [#20]). Every display was assumed to be 2x, so a 1080p monitor at 1x came out
+  as 3840x2160. It now comes out at 1920x1080, and Retina is unchanged. On 1x
+  displays that is 75% less pixel data per frame.
+
+### Behavior change
+
+- **macOS 13.0 is now the minimum** ([#18], closes [#16]). The stream setup
+  always uses audio settings that only exist on 13.0+, so sessions on 12.x
+  most likely crashed. On older versions `available_backends()` is now empty
+  and `try_resolve()` returns `BackendUnavailable`.
+
+### Also
+
+- On macOS 13, both sizing paths fall back to the display mode's pixel/point
+  ratio, since the content-filter size APIs are 14+ only.
+
 ## [0.2.6] - 2026-10-03
 
 Wayland `frame_rate` and `queue_depth` now actually do something, and dropped
@@ -158,7 +187,8 @@ Initial published release.
 repository, so it is deliberately left undocumented here.
 -->
 
-[Unreleased]: https://github.com/Itz-Agasta/pinray/compare/v0.2.6...HEAD
+[Unreleased]: https://github.com/Itz-Agasta/pinray/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/Itz-Agasta/pinray/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/Itz-Agasta/pinray/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/Itz-Agasta/pinray/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/Itz-Agasta/pinray/compare/v0.2.2...v0.2.4
@@ -172,3 +202,9 @@ repository, so it is deliberately left undocumented here.
 [#12]: https://github.com/Itz-Agasta/pinray/pull/12
 [#13]: https://github.com/Itz-Agasta/pinray/issues/13
 [#14]: https://github.com/Itz-Agasta/pinray/pull/14
+[#15]: https://github.com/Itz-Agasta/pinray/issues/15
+[#16]: https://github.com/Itz-Agasta/pinray/issues/16
+[#18]: https://github.com/Itz-Agasta/pinray/pull/18
+[#19]: https://github.com/Itz-Agasta/pinray/pull/19
+[#20]: https://github.com/Itz-Agasta/pinray/issues/20
+[#21]: https://github.com/Itz-Agasta/pinray/pull/21
