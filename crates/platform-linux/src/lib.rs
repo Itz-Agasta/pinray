@@ -60,7 +60,15 @@ pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     {
         let mut sources = Vec::new();
 
-        if x11::is_x11_available() {
+        
+        if wayland::is_wayland_session() {
+            match wayland::enumerate_sources() {
+                Ok(wl_sources) => sources.extend(wl_sources),
+                Err(error) => tracing::warn!(%error, "x11 source enumeration failed"),
+            }
+        } 
+        // Since x11::is_x11::available() matches Xwayland sessions, only check it if wayland isnt available
+        else if x11::is_x11_available() { 
             match x11::enumerate_sources() {
                 Ok(x11_sources) => sources.extend(x11_sources),
                 Err(error) => tracing::warn!(%error, "x11 source enumeration failed"),
