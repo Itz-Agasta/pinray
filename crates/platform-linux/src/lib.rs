@@ -54,10 +54,6 @@ pub fn available_backends() -> Vec<BackendInfo> {
 /// Enumerates capture sources for the current session.
 ///
 /// - Wayland session: displays come from the compositor's `wl_output`
-
-/// Enumerates capture sources for the current session.
-///
-/// - Wayland session: displays come from the compositor's `wl_output`
 ///   globals (see `wayland::enumerate`). No portal dialog is opened.
 ///   Windows are not listed, since Wayland has no portable way to enumerate
 ///   them outside the portal.
