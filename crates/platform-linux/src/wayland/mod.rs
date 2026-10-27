@@ -200,8 +200,10 @@ pub(super) fn platform_error(error: impl std::fmt::Display) -> PinrayError {
 
 pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     let mut sources = Vec::new();
+
     for entry in enumerate::enumerate_monitors()? {
-        sources.push(CaptureSource::Display(entry.source));
+        sources.push(CaptureSource::Display(entry));
     }
-    todo!()
+    
+    Ok(sources)
 }
