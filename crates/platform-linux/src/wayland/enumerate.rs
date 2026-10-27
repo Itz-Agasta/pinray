@@ -130,7 +130,7 @@ impl Dispatch<ZxdgOutputV1, usize> for WlState {
             }
 
             let logical_width = width as u32;
-            let scale_milli = current_width_milli / logical_width;
+            let scale_milli = (current_width_milli + logical_width / 2) / logical_width;
             state.outputs[*idx].scale_factor_milli = scale_milli;
         }
     }
