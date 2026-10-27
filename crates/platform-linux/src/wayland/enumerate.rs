@@ -36,7 +36,7 @@ impl Dispatch<WlRegistry, ()> for WlState {
                     name: String::from("undefined"),
                     width: 0,
                     height: 0,
-                    scale_factor_milli: 0,
+                    scale_factor_milli: 1000,
                     is_primary: false
                 });
                 let output = registry.bind::<WlOutput, _, _>(name, version.min(4), qh, idx);
@@ -80,6 +80,11 @@ impl Dispatch<ZxdgOutputV1, usize> for WlState {
         match event {
             zxdg_output_v1::Event::LogicalSize { width, height: _ } => {
                 let current_width_milli = state.outputs[*idx].width * 1000;
+                
+                if width == 0 || current_width_milli == 0{
+                    return
+                }
+                
                 let logical_width = width as u32;
                 let scale_milli = current_width_milli / logical_width;
                 state.outputs[*idx].scale_factor_milli = scale_milli;
@@ -99,6 +104,7 @@ pub(super) fn enumerate_monitors() -> Result<Vec<DisplaySource>> {
 
     let mut state = WlState::default();
     queue.roundtrip(&mut state).map_err(platform_error)?; // registry globals → bind outputs
+    queue.roundtrip(&mut state).map_err(platform_error)?; // output geometry/mode/name events
 
     if let Some(mgr) = &state.zxdg_output_manager {
         for (idx, output) in state.wl_outputs.iter().enumerate() {
@@ -106,7 +112,7 @@ pub(super) fn enumerate_monitors() -> Result<Vec<DisplaySource>> {
         }
     }
 
-    queue.roundtrip(&mut state).map_err(platform_error)?; // output geometry/mode/name events
+    queue.roundtrip(&mut state).map_err(platform_error)?; // output zxdg logical size events
 
     Ok(state.outputs)
 }
