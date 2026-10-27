@@ -54,6 +54,10 @@ pub fn available_backends() -> Vec<BackendInfo> {
 /// Enumerates capture sources for the current session.
 ///
 /// - Wayland session: displays come from the compositor's `wl_output`
+
+/// Enumerates capture sources for the current session.
+///
+/// - Wayland session: displays come from the compositor's `wl_output`
 ///   globals (see `wayland::enumerate`). No portal dialog is opened.
 ///   Windows are not listed, since Wayland has no portable way to enumerate
 ///   them outside the portal.
@@ -71,14 +75,18 @@ pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     {
         let mut sources = Vec::new();
 
+        let mut wayland_succeeded = false;
         if wayland::is_wayland_session() {
             match wayland::enumerate_sources() {
-                Ok(wl_sources) => sources.extend(wl_sources),
+                Ok(wl_sources) => {
+                    sources.extend(wl_sources);
+                    wayland_succeeded = true;
+                }
                 Err(error) => tracing::warn!(%error, "wayland source enumeration failed"),
             }
         }
         // Since x11::is_x11::available() matches Xwayland sessions, only check it if wayland isnt available
-        else if x11::is_x11_available() {
+        if x11::is_x11_available() && !wayland_succeeded {
             match x11::enumerate_sources() {
                 Ok(x11_sources) => sources.extend(x11_sources),
                 Err(error) => tracing::warn!(%error, "x11 source enumeration failed"),

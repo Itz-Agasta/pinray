@@ -187,9 +187,11 @@ pub fn available_backends() -> Vec<BackendInfo> {
 /// Enumerates capturable displays, windows, and audio sources.
 ///
 /// Source ids feed [`VideoCaptureTarget`]; `SourceId::new("auto")` selects
-/// the primary display without enumerating. On pure Wayland (no Xwayland)
-/// video sources cannot be listed — selection happens in the portal dialog
-/// instead. On macOS this triggers the screen-recording permission check.
+/// the primary display without enumerating. On Wayland, video sources are 
+/// listed without a portal dialog, but windows are not. IDs are informational:
+/// the ScreenCast portal cannot be told which output to capture, that is instead
+/// done in a portal doalog. `VideoCaptureTarget` id is not enforced.
+/// On macOS this triggers the screen-recording permission check.
 pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     let mut sources = Vec::new();
     #[cfg(target_os = "linux")]

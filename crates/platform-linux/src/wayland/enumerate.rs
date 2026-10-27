@@ -13,7 +13,7 @@ use pinray_core::{DisplaySource, Result, SourceId};
 use wayland_client::{
     Connection, Dispatch, QueueHandle, WEnum,
     protocol::{
-        wl_output::{self, WlOutput},
+        wl_output::{self, Transform, WlOutput},
         wl_registry::{self, WlRegistry},
     },
 };
@@ -24,10 +24,17 @@ use wayland_protocols::xdg::xdg_output::zv1::client::{
 
 use crate::wayland::platform_error;
 
+// for things that dont fit in display source but still need to be tracked
+struct DisplayInfo {
+    transform: WEnum<Transform>,
+    has_name: bool,
+}
+
 #[derive(Default)]
 struct WlState {
     outputs: Vec<DisplaySource>,
     wl_outputs: Vec<WlOutput>,
+    display_info: Vec<DisplayInfo>,
     zxdg_output_manager: Option<ZxdgOutputManagerV1>,
 }
 
@@ -57,13 +64,18 @@ impl Dispatch<WlRegistry, ()> for WlState {
                     scale_factor_milli: 1000,
                     is_primary: idx == 0,
                 });
+                state.display_info.push(DisplayInfo {
+                    transform: WEnum::Value(Transform::Normal),
+                    has_name: false,
+                });
+
                 let output = registry.bind::<WlOutput, _, _>(name, version.min(4), qh, idx);
                 state.wl_outputs.push(output);
             }
 
             if interface == "zxdg_output_manager_v1" {
                 state.zxdg_output_manager =
-                    Some(registry.bind::<ZxdgOutputManagerV1, _, _>(name, version.min(1), qh, ()));
+                    Some(registry.bind::<ZxdgOutputManagerV1, _, _>(name, version.min(3), qh, ()));
             }
         }
     }
@@ -94,7 +106,18 @@ impl Dispatch<WlOutput, usize> for WlState {
                 source.insert_str(0, "display:");
                 out.name = name;
                 out.id = SourceId(source);
+                state.display_info[*idx].has_name = true;
             } // v4+
+            wl_output::Event::Geometry {
+                x: _,
+                y: _,
+                physical_width: _,
+                physical_height: _,
+                subpixel: _,
+                make: _,
+                model: _,
+                transform,
+            } => state.display_info[*idx].transform = transform,
             _ => {}
         }
     }
@@ -122,16 +145,37 @@ impl Dispatch<ZxdgOutputV1, usize> for WlState {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let zxdg_output_v1::Event::LogicalSize { width, height: _ } = event {
-            let current_width_milli = state.outputs[*idx].width * 1000;
+        match event {
+            zxdg_output_v1::Event::LogicalSize { width, height } => {
+                let current_width_milli = state.outputs[*idx].width * 1000;
 
-            if width == 0 || current_width_milli == 0 {
-                return;
+                // If the monitor is rotated vertically, the height is the real width
+                let physical_width = match state.display_info[*idx].transform.into_result() {
+                    Ok(Transform::_90)
+                    | Ok(Transform::_270)
+                    | Ok(Transform::Flipped90)
+                    | Ok(Transform::Flipped270) => height,
+                    _ => width,
+                };
+
+                if physical_width == 0 || current_width_milli == 0 {
+                    return;
+                }
+
+                let logical_width = physical_width as u32;
+                let scale_milli = current_width_milli / logical_width;
+                state.outputs[*idx].scale_factor_milli = scale_milli;
             }
-
-            let logical_width = width as u32;
-            let scale_milli = current_width_milli / logical_width;
-            state.outputs[*idx].scale_factor_milli = scale_milli;
+            zxdg_output_v1::Event::Name { name } => {
+                if !state.display_info[*idx].has_name {
+                    let mut source = name.clone();
+                    source.insert_str(0, "display:");
+                    state.outputs[*idx].name = name;
+                    state.outputs[*idx].id = SourceId(source);
+                    state.display_info[*idx].has_name = true;
+                }
+            }
+            _ => {}
         }
     }
 }
