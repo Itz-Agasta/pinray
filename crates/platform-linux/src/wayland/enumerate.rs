@@ -1,10 +1,9 @@
 //! Wayland display and window enumeration.
 //!
-//! Displays comes from the wl_output protocol, which reports what monitors are available.
-//! Along with this, we request zxdg_output_manager_v1 to help get fractional scaling information.
-//! After sending the initial requests to the compositor, we add events to the queue to
-//! get the xdg output information of all monitors. Since scaling is reported as an integer,
-//! we use the logical size and the display size to calculate the fractional scaling per monitor.
+//! Displays come from the wl_output globals from the compositor, which 
+//! reports what monitors are available. wl_output only reports integer 
+//! scaling, so we also bind zxdg_output_v1 to each monitor to read the 
+//! logical size and compute the scale manually against the physical size
 
 
 use pinray_core::{DisplaySource, Result, SourceId};
