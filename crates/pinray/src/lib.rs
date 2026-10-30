@@ -187,7 +187,7 @@ pub fn available_backends() -> Vec<BackendInfo> {
 /// Enumerates capturable displays, windows, and audio sources.
 ///
 /// Source ids feed [`VideoCaptureTarget`]; `SourceId::new("auto")` selects
-/// the primary display without enumerating. On Wayland, video sources are 
+/// the primary display without enumerating. On Wayland, video sources are
 /// listed without a portal dialog, but windows are not. IDs are informational:
 /// the ScreenCast portal cannot be told which output to capture, that is instead
 /// done in a portal dialog. `VideoCaptureTarget` id is not enforced.
