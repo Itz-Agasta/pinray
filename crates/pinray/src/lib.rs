@@ -190,7 +190,7 @@ pub fn available_backends() -> Vec<BackendInfo> {
 /// the primary display without enumerating. On Wayland, video sources are 
 /// listed without a portal dialog, but windows are not. IDs are informational:
 /// the ScreenCast portal cannot be told which output to capture, that is instead
-/// done in a portal doalog. `VideoCaptureTarget` id is not enforced.
+/// done in a portal dialog. `VideoCaptureTarget` id is not enforced.
 /// On macOS this triggers the screen-recording permission check.
 pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     let mut sources = Vec::new();
