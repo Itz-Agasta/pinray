@@ -28,6 +28,8 @@ use crate::wayland::platform_error;
 struct DisplayInfo {
     transform: WEnum<Transform>,
     has_name: bool,
+    // The wl_output::Event::Done arm runs twice, once from wl_output and once from zxdg_output_v1, so store the resolution reported by the compositor here and apply it later any number of times.
+    mode: (u32, u32) // w, h
 }
 
 #[derive(Default)]
@@ -67,6 +69,7 @@ impl Dispatch<WlRegistry, ()> for WlState {
                 state.display_info.push(DisplayInfo {
                     transform: WEnum::Value(Transform::Normal),
                     has_name: false,
+                    mode: (0, 0)
                 });
 
                 let output = registry.bind::<WlOutput, _, _>(name, version.min(4), qh, idx);
@@ -98,8 +101,7 @@ impl Dispatch<WlOutput, usize> for WlState {
                 height,
                 ..
             } if f.contains(wl_output::Mode::Current) => {
-                out.width = width as u32;
-                out.height = height as u32;
+                state.display_info[*idx].mode = (width as u32, height as u32);
             }
             wl_output::Event::Name { name } => {
                 let mut source = name.clone();
@@ -118,6 +120,20 @@ impl Dispatch<WlOutput, usize> for WlState {
                 model: _,
                 transform,
             } => state.display_info[*idx].transform = transform,
+            // Update the width/height rotation here to avoid potentially updating 
+            // the width and height before receiving the rotation
+            wl_output::Event::Done => {
+                let display_info = &state.display_info[*idx];
+                (out.width, out.height) = match display_info.transform.into_result() {
+                    Ok(Transform::_90)
+                    | Ok(Transform::_270)
+                    | Ok(Transform::Flipped90)
+                    | Ok(Transform::Flipped270) => {
+                        (display_info.mode.1, display_info.mode.0)
+                    },
+                    _ => (display_info.mode.0, display_info.mode.1),
+                };
+            }
             _ => {}
         }
     }
@@ -146,17 +162,9 @@ impl Dispatch<ZxdgOutputV1, usize> for WlState {
         _: &QueueHandle<Self>,
     ) {
         match event {
-            zxdg_output_v1::Event::LogicalSize { width, height } => {
+            zxdg_output_v1::Event::LogicalSize { width, height: _ } => {
                 let current_width_milli = state.outputs[*idx].width * 1000;
-
-                // If the monitor is rotated vertically, the height is the real width
-                let physical_width = match state.display_info[*idx].transform.into_result() {
-                    Ok(Transform::_90)
-                    | Ok(Transform::_270)
-                    | Ok(Transform::Flipped90)
-                    | Ok(Transform::Flipped270) => height,
-                    _ => width,
-                };
+                let physical_width = width;
 
                 if physical_width == 0 || current_width_milli == 0 {
                     return;
