@@ -102,6 +102,7 @@ impl Dispatch<WlOutput, usize> for WlState {
                 ..
             } if f.contains(wl_output::Mode::Current) => {
                 state.display_info[*idx].mode = (width as u32, height as u32);
+                (out.width, out.height) = (width as u32, height as u32);
             }
             wl_output::Event::Name { name } => {
                 let mut source = name.clone();
