@@ -51,16 +51,38 @@ pub fn available_backends() -> Vec<BackendInfo> {
     Vec::new()
 }
 
-/// Enumerates displays and windows via X11 when a `DISPLAY` is reachable
-/// (including Xwayland). Pure Wayland cannot enumerate without opening a
-/// portal dialog, so there the list only carries the system-audio source and
-/// display selection happens inside the portal dialog at session build.
+/// Enumerates capture sources for the current session.
+///
+/// - Wayland session: displays come from the compositor's `wl_output`
+///   globals (see `wayland::enumerate`). No portal dialog is opened.
+///   Windows are not listed, since Wayland has no portable way to enumerate
+///   them outside the portal.
+/// - Otherwise, with a reachable `DISPLAY`: displays (RandR monitors) and
+///   windows (EWMH `_NET_CLIENT_LIST`) via X11.
+///
+/// The PipeWire system-audio source is always appended.
+///
+/// On Wayland the returned display IDs are informational only: the
+/// ScreenCast portal has no way to request a specific output, so the user
+/// still picks what to capture in the portal dialog at session build, and a
+/// `VideoCaptureTarget::Display` ID is not enforced.
 pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     #[cfg(target_os = "linux")]
     {
         let mut sources = Vec::new();
 
-        if x11::is_x11_available() {
+        let mut wayland_succeeded = false;
+        if wayland::is_wayland_session() {
+            match wayland::enumerate_sources() {
+                Ok(wl_sources) => {
+                    sources.extend(wl_sources);
+                    wayland_succeeded = true;
+                }
+                Err(error) => tracing::warn!(%error, "wayland source enumeration failed"),
+            }
+        }
+        // Since x11::is_x11::available() matches Xwayland sessions, only check it if wayland isnt available
+        if x11::is_x11_available() && !wayland_succeeded {
             match x11::enumerate_sources() {
                 Ok(x11_sources) => sources.extend(x11_sources),
                 Err(error) => tracing::warn!(%error, "x11 source enumeration failed"),

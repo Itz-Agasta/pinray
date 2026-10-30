@@ -8,15 +8,17 @@
 //! Module layout:
 //! - `worker.rs` — PipeWire main-loop thread
 //! - `format.rs` — EnumFormat params + pixel-format normalization
+//! - `enumerate.rs` — Enumerate wayland displays via wl_output and xdg-output
 
+mod enumerate;
 mod format;
 mod worker;
 
 use std::{sync::mpsc, thread, time::Duration};
 
 use pinray_core::{
-    AudioBackend, BackendBundle, BackendInfo, BackendKind, CaptureEvent, CursorMode, PinrayError,
-    Result, SessionConfig, VideoBackend,
+    AudioBackend, BackendBundle, BackendInfo, BackendKind, CaptureEvent, CaptureSource, CursorMode,
+    PinrayError, Result, SessionConfig, VideoBackend,
 };
 
 use crate::{audio::resolve_system_audio, portal::PortalClient};
@@ -196,4 +198,16 @@ impl Drop for WaylandVideoBackend {
 
 pub(super) fn platform_error(error: impl std::fmt::Display) -> PinrayError {
     PinrayError::Platform(error.to_string())
+}
+
+/// Lists wayland displays without opening a portal dialog.
+/// IDs are informational, see the crate-level `enumerate_sources` docs for more info.
+pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
+    let mut sources = Vec::new();
+
+    for entry in enumerate::enumerate_monitors()? {
+        sources.push(CaptureSource::Display(entry));
+    }
+
+    Ok(sources)
 }
