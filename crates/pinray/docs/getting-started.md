@@ -1,8 +1,8 @@
-# Getting Started
+# Getting started
 
-pinray captures screens, windows, and system audio through each OS's native API and hands you raw frames. This guide walks from install to your first frames. Full API reference: [docs.rs/pinray](https://docs.rs/pinray).
+This guide takes you from `cargo add` to your first captured frames, then covers picking a source, adding audio, tuning the session, and writing frames to a video file. The full API reference is on [docs.rs/pinray](https://docs.rs/pinray).
 
-> docs.rs builds the `pinray` and `pinray-platform-*` crates for a fixed target per platform (docs.rs can't link the native libraries for every OS at once, e.g. no `libpipewire` on their Linux builders) - the badge you land on may say Windows or macOS even if you're targeting Linux. The type definitions are identical on every platform regardless of which one the page was built for. For a build that's never redirected, see [docs.rs/pinray-core](https://docs.rs/pinray-core) - it has no native dependencies and always builds on the plain default target.
+> docs.rs can't link every OS's native libraries in one build (its Linux builders have no `libpipewire`), so it builds the `pinray` and `pinray-platform-*` crates for one fixed target each. The page you land on may say Windows or macOS even if you target Linux, but the types are identical on every platform. [docs.rs/pinray-core](https://docs.rs/pinray-core) has no native dependencies and always builds on the default target.
 
 ## Install
 
@@ -10,9 +10,11 @@ pinray captures screens, windows, and system audio through each OS's native API 
 cargo add pinray
 ```
 
-Linux needs build-time system libraries (see [platforms.md](https://github.com/Itz-Agasta/pinray/blob/main/docs/platforms.md#linux)); macOS and Windows need nothing extra.
+Linux needs the PipeWire headers and `clang` to build (see [Platform support](https://github.com/Itz-Agasta/pinray/blob/main/docs/platforms.md#linux)). macOS and Windows need nothing extra.
 
 ## Capture your first frames
+
+This program captures 60 events from the primary display and prints each frame's size and timestamp:
 
 ```rust,no_run
 use std::time::Duration;
@@ -26,12 +28,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     session.start()?;
     for _ in 0..60 {
         match session.next_event(Some(Duration::from_secs(5)))? {
-            CaptureEvent::Video(frame) => {
-                // frame.data is FrameData::Host(Vec<u8>) - packed rows of
-                // frame.stride bytes, frame.pixel_format (BGRA by default)
-                println!("{}x{} at t={}ns", frame.width, frame.height, frame.stream_time_ns);
-            }
-            CaptureEvent::Gap(gap) => eprintln!("dropped frames: {:?}", gap),
+            CaptureEvent::Video(frame) => println!(
+                "{}x{} at t={}ns",
+                frame.width, frame.height, frame.stream_time_ns
+            ),
+            CaptureEvent::Gap(gap) => eprintln!("dropped frames: {gap:?}"),
             _ => {}
         }
     }
@@ -40,9 +41,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`SourceId::new("auto")` targets the primary display. On Wayland the compositor shows a permission dialog instead - whatever the user picks there is what you capture.
+`SourceId::new("auto")` targets the primary display. On Wayland, the compositor shows a permission dialog instead, and you capture whatever the user picks there. Each frame's pixels are in `frame.data` as `FrameData::Host(Vec<u8>)`, laid out as rows of `frame.stride` bytes in `frame.pixel_format` (BGRA by default).
 
 ## Pick a specific display or window
+
+`pinray::enumerate_sources()` lists displays, windows, and audio sources. This finds a Firefox window and captures it:
 
 ```rust,no_run
 use pinray::{CaptureSource, CaptureSession, VideoCaptureTarget};
@@ -60,9 +63,11 @@ if let Some(id) = window {
 # Ok::<(), pinray::PinrayError>(())
 ```
 
-Window ids die with the window - enumerate right before building the session.
+Window ids stop working when the window closes, so enumerate right before you build the session. Wayland doesn't list windows, and its display ids aren't enforced, because the portal dialog decides what you capture.
 
 ## Add system audio
+
+Add `.audio(AudioCapture::SystemMix)` to capture everything the system plays alongside the video:
 
 ```rust,no_run
 use pinray::{AudioCapture, CaptureSession, SourceId, VideoCaptureTarget};
@@ -75,11 +80,11 @@ session.start()?;
 # Ok::<(), pinray::PinrayError>(())
 ```
 
-Audio arrives as `CaptureEvent::Audio` interleaved with video from `next_event`, or drain it directly with `session.next_audio(timeout)` on Linux/Windows. On macOS, ScreenCaptureKit delivers audio only through `next_event`; `next_audio` returns `BackendNotSelected` there.
+Audio arrives from `next_event` as `CaptureEvent::Audio`, mixed in with video. On Linux and Windows you can also read audio on its own with `session.next_audio(timeout)`. On macOS, audio only comes through `next_event`, and `next_audio` returns `BackendNotSelected` ([#34](https://github.com/Itz-Agasta/pinray/issues/34)).
 
-### Audio only, no video
+### Capture audio without video
 
-You don't need a `video_target` at all - an audio-only session is a first-class use case, not a side effect of the video API, and it never shows a permission dialog on Linux/Windows:
+Leave out `video_target` to capture audio only. On Linux and Windows this never shows a permission dialog. macOS still needs Screen Recording permission, because ScreenCaptureKit captures audio.
 
 ```rust,no_run
 use std::time::Duration;
@@ -96,25 +101,37 @@ session.stop()?;
 # Ok::<(), pinray::PinrayError>(())
 ```
 
-Runnable version: `cargo run --example audio_smoke`.
+On macOS, call `next_event` and match `CaptureEvent::Audio` instead of `next_audio`. The runnable version is `cargo run --example audio_smoke` (Linux and Windows).
 
-**Only `AudioCapture::SystemMix` (loopback / sink monitor - "everything the system plays") is implemented today.** `AudioCapture::Microphone(SourceId)` exists in the enum but no backend implements it yet - `.build()` itself fails with `PinrayError::Unsupported`, before a session is ever created. If you need mic input, pinray can't do that yet; track backend support before building on this path.
+Only `AudioCapture::SystemMix` is implemented, meaning loopback of everything the system plays. `AudioCapture::Microphone` exists in the enum, but no backend supports it yet, and `build()` returns `PinrayError::Unsupported` before a session is created.
 
-## Tuning
+## Tune the session
+
+Every setting has a default, so set only the ones you need:
 
 ```rust,no_run
 use pinray::{BackendPreference, CaptureSession, CursorMode, PixelFormat, Rect};
 
+let crop = Rect { x: 0, y: 0, width: 1280, height: 720 };
 let builder = CaptureSession::builder()
-    .backend_preference(BackendPreference::Auto) // or force WindowsWgc, LinuxX11, ...
-    .pixel_format(PixelFormat::Rgba8888)         // BGRA is native everywhere; RGBA costs a swizzle
+    .backend_preference(BackendPreference::Auto)
+    .pixel_format(PixelFormat::Rgba8888)
     .cursor_mode(CursorMode::Hidden)
-    .crop_rect(Some(Rect { x: 0, y: 0, width: 1280, height: 720 }))
+    .crop_rect(Some(crop))
     .frame_rate(Some(30))
-    .queue_depth(4);                             // frames buffered before drops
+    .queue_depth(4);
 ```
 
-Check what you actually got:
+What each setting does:
+
+- **`backend_preference`**: `Auto` picks per platform, or force a backend such as `WindowsWgc` or `LinuxX11`
+- **`pixel_format`**: BGRA is native everywhere, and `Rgba8888` costs a CPU swizzle
+- **`cursor_mode`**: DXGI never draws the cursor, whatever you set
+- **`crop_rect`**: ignored on Wayland ([#30](https://github.com/Itz-Agasta/pinray/issues/30))
+- **`frame_rate`**: a maximum, not a guarantee (see [Frame rate](#frame-rate))
+- **`queue_depth`**: how many frames are buffered before new ones are dropped
+
+Backend selection differs per machine, so check what you got and include it in bug reports:
 
 ```rust,no_run
 # let session = pinray::CaptureSession::builder().audio(pinray::AudioCapture::SystemMix).build()?;
@@ -123,48 +140,58 @@ println!("{:?}: audio={} notes={}", info.kind, info.supports_audio, info.notes);
 # Ok::<(), pinray::PinrayError>(())
 ```
 
-Include that output in bug reports - backend selection differs per machine.
+## Timestamps, sequence numbers, and gaps
 
-## Timestamps, sequences, gaps
+Each frame carries timing data you can use to detect drops and line up audio with video:
 
-- `stream_time_ns` is monotonic and comparable between a session's audio and video streams. The epoch differs per platform (boot time on macOS/Windows, process-relative on Linux) - compute deltas, don't compare across machines.
-- `sequence` increments once per captured frame per stream, including frames dropped because the consumer's queue was full; a jump means the consumer fell behind and frames were dropped. Frames skipped by `frame_rate` pacing are not counted.
-- `CaptureEvent::Gap` reports drops and backend restarts explicitly.
+- **`stream_time_ns`**: monotonic, and comparable between a session's audio and video. The epoch differs per platform (boot time on macOS and Windows, process start on Linux), so compute deltas rather than comparing across machines
+- **`sequence`**: goes up by one per captured frame, per stream, including frames dropped because your queue was full. A jump means you fell behind. Frames skipped by `frame_rate` pacing aren't counted
+- **`CaptureEvent::Gap`**: reports drops and backend restarts explicitly
 
-## Muxing frames into a video file
+## Write frames to a video file
 
-pinray deliberately doesn't encode (see the crate docs) - piping `VideoFrame`/`AudioFrame` bytes into ffmpeg (or another encoder) is on you. Two mistakes are easy to make here and both produce a file that opens and plays fine while being silently wrong:
+pinray doesn't encode, so piping `VideoFrame` and `AudioFrame` bytes into ffmpeg or another encoder is up to you. Two mistakes here produce a file that plays fine but is wrong.
 
-**1. Row padding.** `stride` can be wider than `width * bytes_per_pixel` (platform row alignment). Copying `FrameData::Host` bytes straight into a `rawvideo` pipe skews every row after the first into a diagonal smear whenever that happens. Always go through [`VideoFrame::to_tight_bytes`] instead of touching `data` directly:
+### Row padding
+
+`stride` can be wider than `width * bytes_per_pixel` because of platform row alignment. If you copy `FrameData::Host` bytes straight into a `rawvideo` pipe, every row after the first shifts into a diagonal smear. Use [`VideoFrame::to_tight_bytes`] instead, which strips the padding:
 
 ```rust,no_run
 # use pinray::{CaptureEvent, CaptureSession};
 # fn handle(session: &mut CaptureSession) -> Result<(), Box<dyn std::error::Error>> {
 if let CaptureEvent::Video(frame) = session.next_event(None)? {
-    let tight = frame.to_tight_bytes().expect("Host frame, packed pixel format");
+    let tight = frame
+        .to_tight_bytes()
+        .expect("Host frame, packed pixel format");
     // write `tight`, not `frame.data`, to your rawvideo pipe
 }
 # Ok(())
 # }
 ```
 
-**2. Frame rate.** `frame_rate` on the builder is a request, not a guarantee - Wayland portals and other push-driven backends deliver frames when the compositor damages the screen, not on a fixed clock. If you declare a constant `-framerate` to ffmpeg's `rawvideo` demuxer and just stream whatever arrives, a real-time recording plays back sped up or slowed down by however far the actual delivery rate was from what you declared, and `-shortest` will silently truncate whichever stream (usually audio) is longer. `stream_time_ns` is exactly what you need to fix this: track how many output frames are "due" by wall-clock delta and duplicate the last frame to fill the gap, instead of assuming one input frame equals one output frame:
+### Frame rate
+
+`frame_rate` is a maximum, not a guarantee. Wayland, DXGI, and WGC deliver frames when the screen changes, not on a fixed clock. If you declare a constant `-framerate` to ffmpeg's `rawvideo` demuxer and stream whatever arrives, the recording plays back too fast or too slow. `-shortest` then cuts off the longer stream, usually audio, without a warning.
+
+Fix this with `stream_time_ns`. Work out how many output frames are due from the elapsed time, and repeat the last frame to fill the gap:
 
 ```rust,no_run
 # use pinray::{CaptureEvent, CaptureSession};
 # fn write_frame_to_pipe(_bytes: &[u8]) {}
 # fn pace(session: &mut CaptureSession) -> Result<(), Box<dyn std::error::Error>> {
-let target_fps = 30i64;
-let frame_interval_ns = 1_000_000_000 / target_fps;
+let frame_interval_ns = 1_000_000_000 / 30; // 30 fps output
 let mut next_due_ns: Option<i64> = None;
 let mut last_frame: Vec<u8> = Vec::new();
 
 loop {
-    let CaptureEvent::Video(frame) = session.next_event(None)? else { continue };
-    let tight = frame.to_tight_bytes().expect("Host frame, packed pixel format");
-    let due = next_due_ns.get_or_insert(frame.stream_time_ns + frame_interval_ns);
+    let CaptureEvent::Video(frame) = session.next_event(None)? else {
+        continue;
+    };
+    let tight = frame.to_tight_bytes().expect("packed Host frame");
+    let due = next_due_ns.get_or_insert(frame.stream_time_ns);
     while frame.stream_time_ns >= *due {
-        write_frame_to_pipe(if last_frame.is_empty() { &tight } else { &last_frame });
+        let out = if last_frame.is_empty() { &tight } else { &last_frame };
+        write_frame_to_pipe(out);
         *due += frame_interval_ns;
     }
     last_frame = tight;
@@ -172,9 +199,11 @@ loop {
 # }
 ```
 
-This duplicates frames to hit a constant declared rate rather than letting a variable capture cadence desync from wall-clock time. It's the minimum fix, not a full VFR-aware muxer - for anything beyond a quick recording, prefer a muxing library or encoder invocation that accepts explicit per-frame PTS derived from `stream_time_ns` instead of a declared constant rate.
+This holds a constant output rate by duplicating frames. It's the minimum fix, not a variable-frame-rate muxer. For anything longer than a short recording, use a muxing library or encoder that accepts a timestamp per frame, and derive it from `stream_time_ns`.
 
 ## Runnable examples
+
+Each example builds a session, reads a short burst of events, and prints what it receives:
 
 ```console
 cargo run --example wayland_smoke    # Linux Wayland: video + audio
