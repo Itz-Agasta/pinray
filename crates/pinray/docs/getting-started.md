@@ -75,7 +75,7 @@ session.start()?;
 # Ok::<(), pinray::PinrayError>(())
 ```
 
-Audio arrives as `CaptureEvent::Audio` interleaved with video from `next_event`, or drain it directly with `session.next_audio(timeout)`.
+Audio arrives as `CaptureEvent::Audio` interleaved with video from `next_event`, or drain it directly with `session.next_audio(timeout)` on Linux/Windows. On macOS, ScreenCaptureKit delivers audio only through `next_event`; `next_audio` returns `BackendNotSelected` there.
 
 ### Audio only, no video
 

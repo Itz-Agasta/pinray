@@ -20,7 +20,7 @@ use crate::{audio::AudioFrame, config::SessionConfig, error::Result, frame::Capt
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendPreference {
     /// Let pinray choose. On Linux: the Wayland portal in a Wayland session,
-    /// otherwise X11. On Windows: DXGI for displays (falling back to WGC),
+    /// otherwise X11 if `DISPLAY` is set (audio-only sessions need neither). On Windows: DXGI for displays (falling back to WGC),
     /// WGC for windows. On macOS: ScreenCaptureKit.
     Auto,
     /// XDG Desktop Portal ScreenCast + PipeWire. Shows a permission dialog

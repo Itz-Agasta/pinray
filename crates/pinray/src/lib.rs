@@ -212,11 +212,15 @@ impl CaptureSession {
 
     /// Waits up to `timeout` for the next audio packet, ignoring video.
     ///
-    /// The simplest way to read an audio-only session.
+    /// The simplest way to read an audio-only session on Linux and Windows.
+    /// On macOS, ScreenCaptureKit delivers audio through
+    /// [`next_event`](Self::next_event) instead, and this method returns
+    /// [`PinrayError::BackendNotSelected`].
     ///
     /// # Errors
     ///
-    /// - [`PinrayError::BackendNotSelected`] if the session has no audio.
+    /// - [`PinrayError::BackendNotSelected`] if the session has no separate
+    ///   audio backend (no audio requested, or macOS).
     /// - [`PinrayError::Timeout`] if nothing arrived in time.
     /// - Any backend error.
     ///
@@ -331,7 +335,8 @@ impl SessionBuilder {
     ///
     /// - [`PinrayError::InvalidConfig`] if no video target or audio is set,
     ///   `frame_rate` or `queue_depth` is zero, or the crop rectangle is
-    ///   empty or outside the source.
+    ///   empty. Some backends also reject a crop outside the source here;
+    ///   others only fail once capture starts.
     /// - [`PinrayError::BackendUnavailable`] if the requested backend can't
     ///   run here (e.g. no Wayland session and no `DISPLAY`).
     /// - [`PinrayError::Unsupported`] for unimplemented options, such as
@@ -372,8 +377,10 @@ pub fn available_backends() -> Vec<BackendInfo> {
 ///
 /// # Errors
 ///
-/// Returns [`PinrayError::Platform`] if the OS enumeration API fails or, on
-/// macOS, screen-recording permission is denied.
+/// On macOS and Windows, returns [`PinrayError::Platform`] if the OS
+/// enumeration API fails or macOS screen-recording permission is denied.
+/// Linux is best-effort: display/window enumeration failures are logged and
+/// skipped, and the remaining sources are returned.
 ///
 /// # Examples
 ///

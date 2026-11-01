@@ -78,8 +78,13 @@ pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
 ///
 /// # Errors
 ///
-/// Returns an error if a matching backend fails to open: the source is
-/// missing, the user denies permission, or an option is unsupported.
+/// - [`pinray_core::PinrayError::BackendUnavailable`] on macOS older than 13.0.
+/// - [`pinray_core::PinrayError::Platform`] if screen-recording permission
+///   is denied, the requested source doesn't exist, or ScreenCaptureKit
+///   fails.
+/// - [`pinray_core::PinrayError::Unsupported`] for microphone capture.
+/// - [`pinray_core::PinrayError::InvalidConfig`] if the source id is
+///   malformed.
 pub fn try_resolve(config: &SessionConfig) -> Result<Option<BackendBundle>> {
     if !cfg!(target_os = "macos") {
         return Ok(None);

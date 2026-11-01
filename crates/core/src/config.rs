@@ -40,8 +40,10 @@ pub enum AudioCapture {
 
 /// Validated session configuration; construct through the session builder.
 ///
-/// Every field has a builder method of the same name on
+/// Each field has a builder method of the same name on
 /// [`SessionBuilder`](crate::SessionBuilder), which documents it in detail.
+/// The exception is `audio_capture`, set with
+/// [`SessionBuilder::audio`](crate::SessionBuilder::audio).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionConfig {
     /// Which backend to use. Default: [`BackendPreference::Auto`](crate::BackendPreference::Auto).

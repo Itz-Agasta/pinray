@@ -79,8 +79,9 @@ impl CaptureSession {
     /// # Errors
     ///
     /// Returns the backend's error if either stream fails to start. If audio
-    /// fails after video started, video is left running; call
-    /// [`stop`](Self::stop) or drop the session to release it.
+    /// fails after video started, video is left running and
+    /// [`stop`](Self::stop) won't release it (the session isn't marked as
+    /// running); drop the session instead.
     #[instrument(skip(self), fields(backend = ?self.backend_info.kind))]
     pub fn start(&mut self) -> Result<()> {
         if self.running {

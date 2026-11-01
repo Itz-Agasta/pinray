@@ -8,7 +8,10 @@
 /// primary display without enumerating. Window ids are only valid while the
 /// window exists — re-enumerate before building a session.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SourceId(pub String);
+pub struct SourceId(
+    /// The raw platform-specific id string.
+    pub String,
+);
 
 impl SourceId {
     /// Wraps a string as a source id.
@@ -48,6 +51,7 @@ pub struct DisplaySource {
     /// the platform has no reliable per-monitor scale.
     pub scale_factor_milli: u32,
     /// Whether this is the primary display (the one `"auto"` selects).
+    /// Not reported on macOS yet, where it is always `false`.
     pub is_primary: bool,
 }
 
@@ -100,7 +104,7 @@ pub enum CaptureSource {
     /// A system playback mix (loopback), used by
     /// [`AudioCapture::SystemMix`](crate::AudioCapture::SystemMix).
     SystemAudio(AudioDeviceSource),
-    /// A microphone or other input device. Listed for discovery only:
-    /// microphone capture is not implemented by any backend yet.
+    /// A microphone or other input device. No backend returns this from
+    /// enumeration yet, and microphone capture is not implemented.
     Microphone(AudioDeviceSource),
 }

@@ -6,8 +6,8 @@ use thiserror::Error;
 
 /// Everything that can go wrong while configuring or running a capture.
 ///
-/// Variants carry a human-readable message from the backend; match on the
-/// variant to decide how to react, and log the message for diagnostics.
+/// Match on the variant to decide how to react. Most variants carry a
+/// human-readable message; log it for diagnostics.
 ///
 /// # Examples
 ///

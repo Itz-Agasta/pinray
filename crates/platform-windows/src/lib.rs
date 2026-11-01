@@ -65,8 +65,13 @@ pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
 ///
 /// # Errors
 ///
-/// Returns an error if a matching backend fails to open: the source is
-/// missing, the user denies permission, or an option is unsupported.
+/// - [`pinray_core::PinrayError::InvalidConfig`] if neither video nor audio
+///   is set, or `crop_rect` has a negative offset or exceeds the source.
+/// - [`pinray_core::PinrayError::Unsupported`] for pixel formats other than
+///   `Bgra8888`/`Rgba8888`, microphone capture, or a window target with
+///   `WindowsDxgi`.
+/// - Other variants if the source is missing or DXGI/WGC/WASAPI fail to
+///   open.
 pub fn try_resolve(config: &SessionConfig) -> Result<Option<BackendBundle>> {
     let applies = matches!(
         config.backend_preference,
