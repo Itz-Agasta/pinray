@@ -99,7 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Where to look for what:
 
-- **[docs.rs/pinray](https://docs.rs/pinray)**: API reference with examples on every public item, plus the getting-started guide
+- **[docs.rs/pinray](https://docs.rs/pinray)**: API reference for every public item, with examples for the main entry points, plus the getting-started guide
 - **[docs.rs/pinray-core](https://docs.rs/pinray-core)**: the same types, built for the default target, and the backend traits if you write your own backend
 - **[Getting started](https://github.com/Itz-Agasta/pinray/blob/main/crates/pinray/docs/getting-started.md)**: install, first frames, sources, audio, tuning, and muxing
 - **[Platform support](https://github.com/Itz-Agasta/pinray/blob/main/docs/platforms.md)**: the feature matrix and per-backend behavior

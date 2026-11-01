@@ -8,8 +8,8 @@ pinray is pre-1.0, so only the latest release gets security fixes.
 
 | Version | Supported |
 | ------- | --------- |
-| 0.2.x (latest) | ✅ |
-| older | ❌ |
+| Latest release | ✅ |
+| Older releases | ❌ |
 
 ## Report a vulnerability
 

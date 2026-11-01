@@ -31,7 +31,7 @@ sudo pacman -S pipewire clang                # Arch
 sudo dnf install pipewire-devel clang        # Fedora
 ```
 
-macOS and Windows need nothing beyond Rust.
+macOS needs nothing beyond Rust. On Windows, the default MSVC toolchain also needs the Visual Studio C++ Build Tools and the Windows SDK; see [rustup's Windows prerequisites](https://rust-lang.github.io/rustup/installation/windows-msvc.html).
 
 ## Run the checks
 
@@ -49,7 +49,9 @@ CI also checks the macOS and Windows crates from Linux. You can run the same che
 
 ```console
 cargo check -p pinray-platform-windows --all-targets --target x86_64-pc-windows-msvc
+cargo check -p pinray --examples --target x86_64-pc-windows-msvc
 cargo check -p pinray-platform-macos --target aarch64-apple-darwin
+cargo check -p pinray --examples --target aarch64-apple-darwin
 ```
 
 If you change doc comments, build the docs with warnings as errors:

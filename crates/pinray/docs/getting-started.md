@@ -188,8 +188,7 @@ loop {
         continue;
     };
     let tight = frame.to_tight_bytes().expect("packed Host frame");
-    let due = next_due_ns
-        .get_or_insert(frame.stream_time_ns + frame_interval_ns);
+    let due = next_due_ns.get_or_insert(frame.stream_time_ns);
     while frame.stream_time_ns >= *due {
         let out = if last_frame.is_empty() { &tight } else { &last_frame };
         write_frame_to_pipe(out);
