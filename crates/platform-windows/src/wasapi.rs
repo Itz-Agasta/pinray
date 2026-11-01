@@ -74,7 +74,8 @@ impl AudioQueue {
 
     /// `Ok(None)` on timeout, `Err(())` once closed and drained.
     fn pop(&self, timeout: Option<Duration>) -> std::result::Result<Option<AudioFrame>, ()> {
-        let deadline = timeout.map(|t| Instant::now() + t);
+        // An unrepresentable deadline degrades to waiting without one.
+        let deadline = timeout.and_then(|t| Instant::now().checked_add(t));
         let mut state = self.state.lock().unwrap();
         loop {
             if let Some(frame) = state.frames.pop_front() {
@@ -417,6 +418,9 @@ mod tests {
         }
         queue.close();
         assert_eq!(queue.pop(None).unwrap().unwrap().sequence, 3);
-        assert!(queue.pop(Some(Duration::ZERO)).is_ok());
+        for sequence in 4..(AUDIO_CHANNEL_CAPACITY as u64 + 3) {
+            assert_eq!(queue.pop(None).unwrap().unwrap().sequence, sequence);
+        }
+        assert!(queue.pop(Some(Duration::ZERO)).is_err());
     }
 }
