@@ -6,10 +6,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The crates.io description now covers audio and names the native backends.
+
 ### Documentation
 
 - Every public item now has doc comments with examples and `# Errors` sections ([#28], closes [#6]).
-- Fixed inaccurate platform docs (X11 default frame rate, audio drop policy, macOS `next_audio`), added `CONTRIBUTING.md`, `SECURITY.md`, and a bug report form, and the README examples are now compiled as doctests.
+- Fixed inaccurate platform docs (X11 default frame rate, audio drop policy, macOS `next_audio`), added `CONTRIBUTING.md`, `SECURITY.md`, and a bug report form, and the README examples are now compiled as doctests ([#35]).
 
 ## [0.2.7] - 2026-10-14
 
@@ -215,3 +219,4 @@ repository, so it is deliberately left undocumented here.
 [#21]: https://github.com/Itz-Agasta/pinray/pull/21
 [#6]: https://github.com/Itz-Agasta/pinray/issues/6
 [#28]: https://github.com/Itz-Agasta/pinray/pull/28
+[#35]: https://github.com/Itz-Agasta/pinray/pull/35

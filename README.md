@@ -23,7 +23,7 @@
 
 </div>
 
-pinray talks to each operating system's native capture API and gives you raw video and audio frames with their metadata intact: stride, pixel format, timestamps, sequence numbers, and drop signals. It doesn't encode. You pipe frames into ffmpeg, WebRTC, wgpu, an image crate, or your own pipeline.
+pinray is for Rust developers building screen recorders, streaming and remote-desktop tools, or apps and agents that need to see the screen. It talks to each operating system's native capture API and gives you raw video and audio frames with their metadata intact: stride, pixel format, timestamps, sequence numbers, and drop signals. It doesn't encode. You pipe frames into ffmpeg, WebRTC, wgpu, an image crate, or your own pipeline.
 
 ## Why pinray
 
