@@ -66,7 +66,9 @@ pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
 /// # Errors
 ///
 /// - [`pinray_core::PinrayError::InvalidConfig`] if neither video nor audio
-///   is set, or `crop_rect` has a negative offset or exceeds the source.
+///   is set, or `crop_rect` has a negative offset. A crop larger than the
+///   source isn't caught here: DXGI fails when the frame is captured, and
+///   WGC logs and skips the frame.
 /// - [`pinray_core::PinrayError::Unsupported`] for pixel formats other than
 ///   `Bgra8888`/`Rgba8888`, microphone capture, or a window target with
 ///   `WindowsDxgi`.
