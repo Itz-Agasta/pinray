@@ -1,72 +1,75 @@
 # Troubleshooting
 
-Start every investigation with two facts: what backend you got and what it says about itself.
+Fixes for common build errors and capture problems, grouped by platform. Before digging in, find out which backend you got and what it says about itself:
 
 ```rust,no_run
-# let session = pinray::CaptureSession::builder().audio(pinray::AudioCapture::SystemMix).build().unwrap();
+# fn main() -> Result<(), pinray::PinrayError> {
+let session = pinray::CaptureSession::builder()
+    .audio(pinray::AudioCapture::SystemMix)
+    .build()?;
 println!("{:?}", session.backend_info());
+# Ok(())
+# }
 ```
 
-And enable logs - every backend traces through the `tracing` crate:
+Then turn on logging. Every backend logs through the [`tracing`](https://crates.io/crates/tracing) crate, and the examples install a subscriber:
 
 ```console
-RUST_LOG=debug cargo run ...
+RUST_LOG=debug cargo run --example audio_smoke
 ```
 
 ## Build errors
 
-**`Package libpipewire-0.3 was not found` (Linux)**
-Install the PipeWire development package: `sudo apt install libpipewire-0.3-dev clang` (Debian/Ubuntu), `sudo pacman -S pipewire` (Arch), `sudo dnf install pipewire-devel clang` (Fedora).
+**`Package libpipewire-0.3 was not found` (Linux)**: install the PipeWire development headers and `clang`.
 
-**`let chains are unstable` or edition errors**
-pinray needs Rust 1.88+. `rustup update stable`.
+```console
+sudo apt install libpipewire-0.3-dev clang   # Debian/Ubuntu
+sudo pacman -S pipewire clang                # Arch
+sudo dnf install pipewire-devel clang        # Fedora
+```
+
+**`let chains are unstable` or edition errors**: pinray needs Rust 1.88 or later. Run `rustup update stable`.
 
 ## Linux
 
-**`BackendUnavailable: no wayland session and no DISPLAY`**
-Neither `XDG_SESSION_TYPE=wayland`/`WAYLAND_DISPLAY` nor `DISPLAY` is set - you're on a headless host. Video needs a session; audio-only sessions still work if PipeWire runs.
+**`BackendUnavailable: no wayland session and no DISPLAY`**: neither `WAYLAND_DISPLAY`/`XDG_SESSION_TYPE=wayland` nor `DISPLAY` is set, so you're on a headless host. Video needs a desktop session, but audio-only sessions still work if PipeWire is running.
 
-**Portal dialog appears every run**
-Capture the restore token: after the first session read it from `session.restore_token()`, persist it, then pass `.restore_token(token)` on the next run to skip the dialog.
+**The portal dialog appears on every run**: save the restore token. After building the first session, read `session.restore_token()`, store it, and pass it to `.restore_token(token)` next time.
 
-**`GetImage on the root window failed ... Xwayland root is not readable`**
-You forced `LinuxX11` inside a Wayland session. Rootless Xwayland has no readable root - use the Wayland backend (`Auto` does this), or run a real Xorg session.
+**`build()` returns `Unsupported("portal request cancelled by user")`**: the user clicked Cancel in the portal dialog. This should be a permission error rather than `Unsupported`, which is tracked in [#29](https://github.com/Itz-Agasta/pinray/issues/29).
 
-**Audio session builds but `next_audio` always times out**
-The sink monitor only produces packets while something plays audio. Silence = no packets on some setups. Play something and retry.
+**`GetImage on the root window failed ... Xwayland root is not readable`**: you forced `LinuxX11` inside a Wayland session, and rootless Xwayland has no readable root window. Use `Auto` (which picks the Wayland backend) or run a real Xorg session.
 
-**`wayland event channel disconnected` / "no more input formats"**
-The PipeWire connection died. If you see it immediately at start, check the portal + PipeWire versions; this was historically caused by dropping the D-Bus connection while PipeWire used its fd (pinray keeps it alive - if you see this, file a bug with `RUST_LOG=debug` output).
+**An audio session builds but `next_audio` always times out**: the sink monitor only produces packets while something is playing, and some setups send nothing during silence. Play audio and try again.
+
+**`wayland event channel disconnected` or "no more input formats"**: the PipeWire connection died. If it happens right at start, check your portal and PipeWire versions. This used to happen when the D-Bus connection closed while PipeWire still used its file descriptor. pinray keeps that connection alive now, so if you see it, file a bug with the `RUST_LOG=debug` output.
 
 ## macOS
 
-**`permission denied` / empty enumeration**
-Grant Screen Recording in System Settings → Privacy & Security, then **relaunch** - macOS applies the grant only to new processes.
+**Permission denied, or `enumerate_sources()` returns nothing**: grant Screen Recording in System Settings → Privacy & Security, then relaunch your app. macOS only applies the grant to new processes.
 
-**Session builds, no frames, no error**
-Check the menu-bar screen-recording indicator. If it never appears, the stream didn't start - most likely permission was granted to a different binary (cargo runs a new path per build). Re-grant for the current binary.
+**The session builds but no frames or errors arrive**: check the menu bar for the screen-recording indicator. If it never appears, the stream didn't start, most likely because permission was granted to a different binary. Cargo can build to a new path, so grant access again for the current binary.
+
+**`next_audio()` returns `BackendNotSelected`**: on macOS, audio arrives through `next_event` as `CaptureEvent::Audio` ([#34](https://github.com/Itz-Agasta/pinray/issues/34)). Read audio from `next_event` instead.
 
 ## Windows
 
-**`next_event` returns `Timeout` constantly (DXGI)**
-Working as designed: DXGI desktop duplication delivers frames on desktop *change*. Move the mouse, play a video, or force WGC (`BackendPreference::WindowsWgc`) for refresh-rate delivery.
+**`next_event` keeps returning `Timeout` (DXGI)**: this is expected. DXGI Desktop Duplication only produces a frame when the desktop changes. Move the mouse or play a video, or force `BackendPreference::WindowsWgc` to get frames at the refresh rate.
 
-**`DuplicateOutput` fails / backend silently becomes WGC**
-Duplication is denied on secure desktops (UAC, lock screen), in some RDP sessions, and when another app holds the output's duplication slot. `Auto` falls back to WGC; check `backend_info().kind` to confirm which you got.
+**`DuplicateOutput` fails, or the backend quietly becomes WGC**: duplication is denied on secure desktops (UAC prompts, the lock screen), in some Remote Desktop sessions, and when another app already duplicates that output. `Auto` falls back to WGC; check `backend_info().kind` to see which one you got.
 
-**No cursor in frames**
-DXGI never draws the cursor. Use WGC.
+**No cursor in frames**: DXGI never draws the cursor. Force `BackendPreference::WindowsWgc`.
 
-**Audio frames are all zeros**
-WASAPI loopback delivers silence packets when nothing plays (pinray zero-fills `AUDCLNT_BUFFERFLAGS_SILENT` packets). Play audio.
+**Audio frames are all zeros**: WASAPI loopback sends silent packets when nothing is playing, and pinray zero-fills them. Play audio.
 
-## General
+## All platforms
 
-**Audio starves when video is busy**
-`next_event` drains pending audio before blocking on video, but if you only ever process video, call `session.next_audio(Some(Duration::ZERO))` in your loop - audio queues are bounded and drop oldest first.
+**Audio drops while video is busy**: `next_event` returns pending audio before it waits for video, but audio queues are bounded and drop packets when you fall behind. If your loop spends a long time per video frame, also poll `session.next_audio(Some(Duration::ZERO))` between frames (Linux and Windows).
 
-**Frames arrive but colors look swapped**
-You assumed RGBA; default is `PixelFormat::Bgra8888`. Either request `.pixel_format(PixelFormat::Rgba8888)` or read `frame.pixel_format`.
+**Colors look swapped**: the default pixel format is `PixelFormat::Bgra8888`, not RGBA. Request `.pixel_format(PixelFormat::Rgba8888)` or read `frame.pixel_format`.
 
-**Still stuck?**
-Open an issue with: OS + version, `backend_info()` output, `RUST_LOG=debug` log, and which example reproduces it (`wayland_smoke` / `x11_smoke` / `macos_smoke` / `windows_smoke` / `audio_smoke`).
+**Every row after the first is shifted (diagonal smear)**: rows are padded to `stride`. Use `frame.to_tight_bytes()` instead of copying `FrameData::Host` directly.
+
+## Reporting a bug
+
+If none of this helps, [open a bug report](https://github.com/Itz-Agasta/pinray/issues/new?template=bug.yml) with your OS and version, the `backend_info()` output, a `RUST_LOG=debug` log, and the example that reproduces it (`wayland_smoke`, `x11_smoke`, `macos_smoke`, `windows_smoke`, or `audio_smoke`).

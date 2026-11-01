@@ -1,7 +1,7 @@
 //! Windows capture backends: DXGI desktop duplication, Windows Graphics
 //! Capture (WGC), and WASAPI loopback audio.
 //!
-//! Backend selection policy (see `docs/windows.md`):
+//! Backend selection policy (see `docs/platforms.md`):
 //! - Display target + `Auto`: DXGI first, WGC as fallback.
 //! - Window target + `Auto`: WGC (DXGI cannot capture single windows).
 //! - Explicit `WindowsDxgi` / `WindowsWgc` preferences are honored as-is.

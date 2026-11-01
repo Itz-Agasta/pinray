@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Itz-Agasta/pinray/security/advisories/new
+    about: Report security problems privately, not as a public issue.

@@ -3,10 +3,10 @@ name = "pinray-platform-linux"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "Linux backends for pinray: Wayland (XDG portal + PipeWire), X11, and PipeWire system audio"
 repository.workspace = true
-keywords.workspace = true
-categories.workspace = true
+keywords = ["screen-capture", "wayland", "pipewire", "x11", "audio-capture"]
+categories = ["os::linux-apis", "multimedia::video", "multimedia::audio"]
 rust-version.workspace = true
 
 # docs.rs builders have no system libpipewire, so the linux-target build
@@ -18,7 +18,7 @@ default-target = "x86_64-pc-windows-msvc"
 targets = ["x86_64-pc-windows-msvc"]
 
 [dependencies]
-pinray-core = { path = "../core", version = "0.2.7" }
+pinray-core = { path = "../core", version = "0.2.8" }
 tracing.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]

@@ -3,10 +3,10 @@ name = "pinray-platform-macos"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "macOS backend for pinray: ScreenCaptureKit display, window, and system-audio capture"
 repository.workspace = true
-keywords.workspace = true
-categories.workspace = true
+keywords = ["screen-capture", "screencapturekit", "macos", "audio-capture", "screen-recording"]
+categories = ["os::macos-apis", "multimedia::video", "multimedia::audio"]
 rust-version.workspace = true
 
 # Build docs for the real macOS implementation (objc2 crates compile for
@@ -16,7 +16,7 @@ default-target = "aarch64-apple-darwin"
 targets = ["aarch64-apple-darwin"]
 
 [dependencies]
-pinray-core = { path = "../core", version = "0.2.7" }
+pinray-core = { path = "../core", version = "0.2.8" }
 tracing.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]

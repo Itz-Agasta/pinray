@@ -6,6 +6,29 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Better crates.io search metadata: the description mentions Wayland and screen recording, keywords now match what pinray does (`screenshot` removed until there's a screenshot API), and crates are listed in the specific video and audio categories, with each platform crate under its own OS API category.
+
+## [0.2.8] - 2026-11-01
+
+Wayland now lists displays without opening the portal dialog, thanks to
+@prushton2. The rest is documentation: every public item is documented, and
+the platform docs now match what each backend actually does.
+
+### Added
+
+- **Wayland lists displays without a portal dialog** ([#26], by @prushton2). `enumerate_sources()` on a Wayland session used to return only the system-audio source. It now lists every monitor from the compositor's `wl_output` globals, with fractional scale from `xdg-output` where available. The ids are informational: the ScreenCast portal can't be told which output to capture, so the user still picks it in the dialog. Windows aren't listed on Wayland.
+
+### Changed
+
+- The crates.io descriptions are more specific: `pinray` covers audio and names the native backends, and each sub-crate describes only what it contains.
+
+### Documentation
+
+- Every public item now has doc comments with examples and `# Errors` sections ([#28], closes [#6]).
+- Fixed inaccurate platform docs (X11 default frame rate, audio drop policy, macOS `next_audio`), added `CONTRIBUTING.md`, `SECURITY.md`, and a bug report form, and the README examples are now compiled as doctests ([#35]).
+
 ## [0.2.7] - 2026-10-14
 
 macOS capture now comes out at the right size. Window capture is sized from
@@ -208,3 +231,7 @@ repository, so it is deliberately left undocumented here.
 [#19]: https://github.com/Itz-Agasta/pinray/pull/19
 [#20]: https://github.com/Itz-Agasta/pinray/issues/20
 [#21]: https://github.com/Itz-Agasta/pinray/pull/21
+[#6]: https://github.com/Itz-Agasta/pinray/issues/6
+[#28]: https://github.com/Itz-Agasta/pinray/pull/28
+[#35]: https://github.com/Itz-Agasta/pinray/pull/35
+[#26]: https://github.com/Itz-Agasta/pinray/pull/26
