@@ -153,7 +153,7 @@ pub(super) fn extract_audio_frame(
         sequence,
         // NOTE: format assumed from SCStreamConfiguration (48 kHz stereo F32).
         // SCKit LPCM may actually be planar (non-interleaved) — see
-        // docs/macos.md "Known Issues"; needs a runtime check on real macOS.
+        // issue #24; needs a runtime check on real macOS.
         sample_rate: 48_000,
         channels: 2,
         sample_format: SampleFormat::F32,

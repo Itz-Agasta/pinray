@@ -82,6 +82,13 @@ pub struct SessionBuilder {
     inner: pinray_core::SessionBuilder,
 }
 
+// Compiles the README's examples as doctests so they can't drift. The path
+// only exists in the repository, which is fine: cfg(doctest) is never set when
+// building the published crate.
+#[cfg(doctest)]
+#[doc = include_str!("../../../README.md")]
+struct ReadmeDoctests;
+
 struct PlatformResolver;
 
 impl BackendResolver for PlatformResolver {

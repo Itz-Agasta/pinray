@@ -1,0 +1,49 @@
+name: Bug report
+description: Capture fails, or pinray doesn't behave as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Check [Troubleshooting](https://github.com/Itz-Agasta/pinray/blob/main/docs/troubleshooting.md) and the [open issues](https://github.com/Itz-Agasta/pinray/issues) first. Backend selection differs per machine, so the fields below matter.
+  - type: input
+    id: version
+    attributes:
+      label: pinray version
+      placeholder: "0.2.7"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and version
+      description: For Linux, include the desktop and session type (Wayland or X11).
+      placeholder: "Fedora 41, GNOME 47, Wayland"
+    validations:
+      required: true
+  - type: textarea
+    id: backend
+    attributes:
+      label: backend_info() output
+      description: "Output of `println!(\"{:?}\", session.backend_info())`, if a session builds."
+      render: text
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The smallest code that reproduces it, or which example fails (wayland_smoke, x11_smoke, audio_smoke, macos_smoke, windows_smoke).
+      render: rust
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug log
+      description: Run with `RUST_LOG=debug` and paste the output.
+      render: text
