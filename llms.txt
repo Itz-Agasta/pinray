@@ -1,132 +1,149 @@
 # pinray
 
-Cross-platform screen and audio capture for Rust. pinray uses each OS's native
-capture API (XDG portal + PipeWire and X11 on Linux, ScreenCaptureKit on
-macOS, DXGI/Windows Graphics Capture + WASAPI on Windows) and returns raw
-video and audio frames with stride, pixel format, timestamps, sequence numbers,
-and drop signals. It doesn't encode: pipe frames into ffmpeg, WebRTC, wgpu, or
-your own pipeline.
+> Cross-platform screen and system-audio capture for Rust. pinray uses each OS's native capture API (XDG portal + PipeWire and X11 on Linux, ScreenCaptureKit on macOS, DXGI / Windows Graphics Capture + WASAPI on Windows) and returns raw video and audio frames with stride, pixel format, timestamps, sequence numbers, and drop signals. It doesn't encode: pipe frames into ffmpeg, WebRTC, wgpu, or your own pipeline.
 
-This file is the whole public API on one page, checked against
-`crates/core/src/*.rs`. If it disagrees with docs.rs/pinray-core, docs.rs wins.
+This page is the whole public API of `pinray` 0.2 plus the rules an agent needs to write correct code against it. It was checked against the source (`crates/core/src/*.rs`, `crates/pinray/src/lib.rs`). If anything here disagrees with docs.rs/pinray-core, docs.rs wins.
 
-## Docs
+## Install
 
-- Guide: docs.rs/pinray (crate-level docs), or `crates/pinray/docs/getting-started.md` in the repo
-- Type reference that builds on any platform: docs.rs/pinray-core. The `pinray` facade is built on docs.rs for one fixed target because docs.rs can't link PipeWire; the types are identical everywhere
-- Platform matrix and per-backend caveats: `docs/platforms.md`
-- Troubleshooting: `docs/troubleshooting.md`
-- Contributing (setup, CI checks): `CONTRIBUTING.md`
+```toml
+[dependencies]
+pinray = "0.2"
+```
+
+- Linux build needs PipeWire headers and clang: `libpipewire-0.3-dev clang` (Debian/Ubuntu), `pipewire clang` (Arch), `pipewire-devel clang` (Fedora). Runtime needs a PipeWire daemon, plus XDG Desktop Portal for Wayland video.
+- macOS 13.0+ and Windows 10+ (WGC needs 1903+) need nothing extra.
+- MSRV is Rust 1.88. pinray is pre-1.0: minor versions may break the API, so depend on `"0.2"`.
 
 ## Quick start
 
 ```rust,no_run
 use std::time::Duration;
-use pinray::{AudioCapture, CaptureEvent, CaptureSession, SourceId, VideoCaptureTarget};
+use pinray::{
+    AudioCapture, CaptureEvent, CaptureSession, PinrayError, SourceId, VideoCaptureTarget,
+};
 
-let mut session = CaptureSession::builder()
-    .video_target(VideoCaptureTarget::Display(SourceId::new("auto")))
-    .audio(AudioCapture::SystemMix)
-    .build()?;
-session.start()?;
-match session.next_event(Some(Duration::from_secs(5)))? {
-    CaptureEvent::Video(f) => println!("{}x{}", f.width, f.height),
-    CaptureEvent::Audio(f) => println!("{} Hz", f.sample_rate),
-    other => println!("{other:?}"),
+fn main() -> Result<(), PinrayError> {
+    let mut session = CaptureSession::builder()
+        .video_target(VideoCaptureTarget::Display(SourceId::new("auto")))
+        .audio(AudioCapture::SystemMix)
+        .build()?; // Wayland: blocks on the portal dialog. macOS: permission check.
+    session.start()?;
+
+    for _ in 0..300 {
+        match session.next_event(Some(Duration::from_millis(500))) {
+            Ok(CaptureEvent::Video(f)) => {
+                let pixels = f.to_tight_bytes(); // BGRA, row padding removed
+                println!("{}x{} seq={} bytes={:?}", f.width, f.height, f.sequence,
+                         pixels.map(|p| p.len()));
+            }
+            Ok(CaptureEvent::Audio(a)) => println!("{} Hz x{}", a.sample_rate, a.channels),
+            Ok(CaptureEvent::Gap(g)) => eprintln!("dropped: {:?}", g.reason),
+            Ok(CaptureEvent::End) => break,
+            // Not an error: DXGI sends nothing while the screen is idle,
+            // X11 polls, Wayland only sends on screen changes.
+            Err(PinrayError::Timeout(_)) => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    session.stop()
 }
-session.stop()?;
 ```
 
-`.video_target(...)` and `.audio(...)` are independent builder calls, and
-`build()` needs at least one. For audio only, skip `.video_target` and read
-with `.next_audio(timeout)` on Linux/Windows, or `.next_event` matching
-`CaptureEvent::Audio` on macOS (`next_audio` returns `BackendNotSelected`
-there). Audio-only shows no permission dialog on Linux/Windows; macOS still
-needs Screen Recording permission. Any video session on Wayland shows the
-portal dialog. Runnable: `cargo run --example audio_smoke`.
+Never write `session.next_event(..)?` in a capture loop: an idle desktop returns `Err(PinrayError::Timeout)` and `?` ends the program. Match `Timeout` and continue, as above.
 
-## Core API
+Audio only: skip `.video_target` and read with `session.next_audio(timeout)` on Linux/Windows. On macOS, read audio from `next_event` as `CaptureEvent::Audio`; `next_audio` returns `BackendNotSelected` there (#34). Audio-only shows no dialog on Linux/Windows; macOS still needs Screen Recording permission.
 
-`CaptureSession::builder() -> SessionBuilder`, then chain:
-`.video_target(VideoCaptureTarget)`, `.audio(AudioCapture)`,
-`.pixel_format(PixelFormat)`, `.restore_token(impl Into<String>)`,
-`.color_space(Option<ColorSpace>)`, `.cursor_mode(CursorMode)`,
-`.crop_rect(Option<Rect>)`, `.frame_rate(Option<u32>)`,
-`.queue_depth(u32)`, `.backend_preference(BackendPreference)`,
-`.build() -> Result<CaptureSession>`.
+## API
 
-`CaptureSession`: `.start()`, `.stop()` (both idempotent),
-`.is_running() -> bool`, `.backend_info() -> &BackendInfo`,
-`.config() -> &CoreSessionConfig`, `.restore_token() -> Option<String>`
-(Wayland portal token; pass it to the builder's `.restore_token` next run),
-`.next_event(Option<Duration>) -> Result<CaptureEvent>`,
-`.next_audio(Option<Duration>) -> Result<AudioFrame>`.
-`None` timeout blocks forever; `Some(Duration::ZERO)` is a non-blocking poll.
+`pinray::CaptureSession::builder() -> pinray::SessionBuilder` (or `SessionBuilder::default()`). Every setter takes and returns the builder by value. Nothing is validated until `build()`:
 
-Free functions: `available_backends() -> Vec<BackendInfo>`,
-`enumerate_sources() -> Result<Vec<CaptureSource>>`.
+- `.video_target(VideoCaptureTarget)`: a display or window. Omit for audio-only
+- `.audio(AudioCapture)`: only `AudioCapture::SystemMix` works; `Microphone(_)` makes `build()` fail with `Unsupported`
+- `.backend_preference(BackendPreference)`: default `Auto`
+- `.pixel_format(PixelFormat)`: default `Bgra8888` (native everywhere); `Rgba8888` costs a CPU swizzle (about 3x the CPU in one 1080p60 Wayland measurement); other formats are unreliable (Windows rejects them, Wayland falls back to BGRA, #31). Always read `frame.pixel_format`
+- `.cursor_mode(CursorMode)`: default `Embedded`; DXGI never draws the cursor
+- `.crop_rect(Option<Rect>)`: default `None`; ignored on Wayland (#30); macOS output is upscaled (#22)
+- `.frame_rate(Option<u32>)`: default `Some(60)`. A maximum, not a guarantee. `None` = uncapped on Wayland/DXGI/WGC, 30 fps on X11, 60 fps on macOS. `Some(0)` fails validation
+- `.queue_depth(u32)`: default `2`; frames buffered before new ones are dropped. `0` fails validation
+- `.restore_token(impl Into<String>)`: Wayland portal token from a previous session; skips the dialog if the compositor still honors it
+- `.color_space(Option<ColorSpace>)`: stored but no backend acts on it (#32); read `frame.color_space` instead
+- `.config() -> &CoreSessionConfig`: the config built so far
+- `.build() -> Result<CaptureSession, PinrayError>`: validates, opens the platform backend, returns a stopped session
 
-## Types (verified against crates/core/src/*.rs)
+`CaptureSession` methods:
+
+- `.start() -> Result<(), PinrayError>` / `.stop() -> Result<(), PinrayError>`: idempotent; a session can be restarted. Call `stop()` when done
+- `.next_event(Option<Duration>) -> Result<CaptureEvent, PinrayError>`: next video frame, audio packet, or gap. `None` blocks forever; `Some(Duration::ZERO)` polls without blocking. On Linux and Windows, where video and audio are separate backends, pending audio comes first and one call can wait up to 2x the timeout. On macOS both arrive from one ScreenCaptureKit stream with a single timeout
+- `.next_audio(Option<Duration>) -> Result<AudioFrame, PinrayError>`: audio only (not on macOS, see above)
+- `.backend_info() -> &BackendInfo`: which backend was picked; log it, it differs per machine
+- `.restore_token() -> Option<String>`: Wayland token to persist for next run; `None` elsewhere
+- `.is_running() -> bool`, `.config() -> &CoreSessionConfig`
+
+Free functions:
+
+- `pinray::enumerate_sources() -> Result<Vec<CaptureSource>, PinrayError>`: displays, windows, and audio sources. Enumerate right before building a session (window ids die with the window). On macOS this triggers the permission check
+- `pinray::available_backends() -> Vec<BackendInfo>`: backends compiled in for this OS
+
+`pinray::Result` is not exported. Write `Result<T, pinray::PinrayError>` (or your own alias).
+
+## Types
 
 ```rust
 enum CaptureEvent { Video(VideoFrame), Audio(AudioFrame), Gap(GapEvent), End }
+// `End` is not emitted by any backend today: stop your loop yourself.
 
 struct VideoFrame {
-    stream_time_ns: i64,   // monotonic within a session, comparable to AudioFrame's;
-                           // epoch is boot time on macOS/Windows, process-relative on Linux
-    sequence: u64,         // jump = dropped frames
+    stream_time_ns: i64,   // monotonic within a session, same clock as AudioFrame;
+                           // epoch: boot on macOS/Windows, process start on Linux
+    sequence: u64,         // +1 per captured frame; a jump = frames dropped
     width: u32,
     height: u32,
-    stride: u32,           // bytes/row in FrameData::Host - can exceed width*bpp, see footgun #1
+    stride: u32,           // bytes per row in FrameData::Host; can exceed width * bpp
     pixel_format: PixelFormat,
     color_space: Option<ColorSpace>,
     data: FrameData,
-    damage: Option<Vec<Rect>>,
+    damage: Option<Vec<Rect>>, // changed regions, when the backend knows
 }
 impl VideoFrame {
-    // Strips row padding (stride -> width*bpp). Use this, not `data` directly.
-    fn to_tight_bytes(&self) -> Option<Vec<u8>>;
+    fn to_tight_bytes(&self) -> Option<Vec<u8>>; // padding stripped; None for non-Host / YUV
 }
 
 enum FrameData {
-    Host(Vec<u8>),              // the only variant any backend produces today
-    Dmabuf(DmabufFrame),        // reserved, unused
-    CvPixelBuffer(CvPixelBufferHandle), // reserved, unused
-    D3D11Texture(D3D11TextureHandle),   // reserved, unused
+    Host(Vec<u8>),                      // the only variant produced today
+    Dmabuf(DmabufFrame),                // reserved
+    CvPixelBuffer(CvPixelBufferHandle), // reserved
+    D3D11Texture(D3D11TextureHandle),   // reserved
 }
 
 enum PixelFormat { Bgra8888, Rgba8888, Rgb888, Nv12, I420 }
-// All backends deliver Bgra8888 natively; Rgba8888 costs a CPU swizzle.
-// Nv12/I420 are not yet produced by any backend.
-impl PixelFormat { fn bytes_per_pixel(self) -> Option<usize>; } // None for Nv12/I420
-
+impl PixelFormat { fn bytes_per_pixel(self) -> Option<usize>; } // 4, 4, 3, None, None
 enum ColorSpace { Srgb, DisplayP3, Bt709, Bt2020 }
 enum CursorMode { Embedded, Hidden }
-struct Rect { x: i32, y: i32, width: u32, height: u32 }
+struct Rect { x: i32, y: i32, width: u32, height: u32 } // relative to the source's top-left
 
 struct AudioFrame {
     stream_time_ns: i64,   // same clock as VideoFrame::stream_time_ns
-    sequence: u64,
-    sample_rate: u32,
+    sequence: u64,         // a jump = packets dropped
+    sample_rate: u32,      // e.g. 48_000
     channels: u16,
     sample_format: SampleFormat,
     data: AudioData,
 }
-enum SampleFormat { I16, I32, F32, F64 }               // NOT S16/S24/S32/U8
-enum AudioData { Interleaved(Vec<u8>), Planar(Vec<Vec<u8>>) } // L R L R... vs one buffer/channel
+enum SampleFormat { I16, I32, F32, F64 }  // little-endian; F32 is the common case. NOT S16/S24/U8
+enum AudioData { Interleaved(Vec<u8>), Planar(Vec<Vec<u8>>) }
 
 enum VideoCaptureTarget { Display(SourceId), Window(SourceId) }
 enum AudioCapture { SystemMix, Microphone(SourceId) }
-// Microphone: no backend implements this yet - CaptureSession::builder().audio(Microphone(_)).build()
-// fails eagerly with PinrayError::Unsupported on all three platforms (checked during backend
-// resolution inside build(), not lazily on first use).
 
-struct SourceId(pub String); // opaque; "auto" = primary display, no enumeration needed
-enum CaptureSource {          // what enumerate_sources() returns - NOT a struct with .id/.name/.kind
+struct SourceId(pub String);  // SourceId::new("auto") = primary display, no enumeration needed
+// Ids are opaque: "display:<name>" (Linux), "display:\\.\DISPLAY1" (Windows),
+// "window:<id>", "audio:system-mix". Take them from enumerate_sources().
+enum CaptureSource {          // an enum, NOT a struct with .id/.name/.kind
     Display(DisplaySource),
     Window(WindowSource),
     SystemAudio(AudioDeviceSource),
-    Microphone(AudioDeviceSource),
+    Microphone(AudioDeviceSource), // never returned today
 }
 struct DisplaySource { id: SourceId, name: String, width: u32, height: u32, scale_factor_milli: u32, is_primary: bool }
 struct WindowSource { id: SourceId, title: String, app_name: Option<String> }
@@ -137,7 +154,8 @@ struct GapEvent { stream_time_ns: i64, reason: GapReason, dropped_frames: Option
 
 enum BackendPreference { Auto, LinuxWaylandPortal, LinuxX11, MacScreenCaptureKit, WindowsDxgi, WindowsWgc }
 enum BackendKind { LinuxWaylandPortal, LinuxX11, LinuxPipeWireAudio, MacScreenCaptureKit, WindowsDxgi, WindowsWgc, WindowsWasapi }
-struct BackendInfo { kind: BackendKind, supports_audio: bool, zero_copy: bool, notes: &'static str } // field is `notes`, not `note`, and &'static str not Option<String>
+struct BackendInfo { kind: BackendKind, supports_audio: bool, zero_copy: bool, notes: &'static str }
+// field is `notes` (not `note`), a &'static str (not Option<String>)
 
 enum PinrayError {
     InvalidConfig(String), BackendUnavailable(String), BackendNotSelected,
@@ -145,52 +163,43 @@ enum PinrayError {
 }
 ```
 
-Config defaults (`SessionConfig::default()`): `backend_preference: Auto`,
-`pixel_format: Bgra8888`, `color_space: Some(Srgb)`, `cursor_mode: Embedded`,
-`frame_rate: Some(60)`, `queue_depth: 2`. Build fails if neither
-`video_target` nor `audio_capture` is set.
+All of these are re-exported at the crate root (`pinray::VideoFrame`, etc.). `SessionConfig` is exported as `pinray::CoreSessionConfig`.
 
-## Known footguns (found by building a real recorder)
+## Errors
 
-1. **Stride vs width.** `VideoFrame.stride` can exceed `width * bytes_per_pixel`.
-   Copying `FrameData::Host` bytes straight into a `rawvideo` pipe or image
-   encoder skews every row after the first: no crash, only wrong pixels.
-   Fix: call `frame.to_tight_bytes()`, never touch `data` directly.
+- `Timeout(_)`: nothing arrived in time. Normal; call again
+- `InvalidConfig(_)`: fix the builder call (nothing to capture, zero `frame_rate`/`queue_depth`, empty or out-of-bounds crop)
+- `BackendUnavailable(_)`: this backend can't run here (no Wayland session and no `DISPLAY`, macOS < 13, forcing another OS's backend)
+- `Unsupported(_)`: unimplemented option (microphone, some pixel formats). Also returned when the user cancels the Wayland portal dialog (#29)
+- `Platform(_)`: OS API failure, macOS Screen Recording permission denied, or the captured window closed
+- `BackendNotSelected`: `next_audio` on a session without a separate audio backend (no audio, or macOS)
 
-2. **Frame rate is a maximum, not a guarantee.** Push-driven backends
-   (Wayland, DXGI, WGC) deliver frames on screen changes, not a fixed clock, even
-   if you set `.frame_rate(Some(30))`. Declaring a constant `-framerate` to
-   ffmpeg's rawvideo demuxer while streaming whatever arrives produces a file
-   that plays back sped up or slowed down, and `-shortest` silently truncates
-   whichever stream is longer. Fix: pace output frames using `stream_time_ns`
-   deltas (duplicate the last frame to fill gaps) instead of assuming one
-   captured frame equals one output frame at your declared rate. Full
-   worked example: `crates/pinray/docs/getting-started.md` "Muxing frames into a video file".
+## Rules agents get wrong
 
-3. **`FrameData` has 4 variants, 1 live.** Every backend currently produces
-   only `Host`; the other three are reserved for future zero-copy paths.
-   You still have to handle them in a match (or use `to_tight_bytes()`,
-   which already does and returns `None` for them).
+1. **Stride.** `stride` can exceed `width * bytes_per_pixel`. Copying `FrameData::Host` straight into an encoder or `rawvideo` pipe skews every row after the first. Use `frame.to_tight_bytes()`.
+2. **BGRA, not RGBA.** Default frames are BGRA. Request `Rgba8888` or swap channels yourself.
+3. **Frame rate is a maximum.** Wayland, DXGI, and WGC send frames on screen changes, not on a clock. For video files, pace output with `stream_time_ns` (duplicate the last frame to fill gaps) instead of declaring a constant rate. Worked example: the "Frame rate" section of the getting-started guide (link below).
+4. **Timeouts are flow, not failure.** See the quick start.
+5. **Threading.** `CaptureSession` is `Send` but not `Sync`: move it into one capture thread and send frames out over a channel. Both read methods take `&mut self`, so one thread owns all reads.
+6. **Wayland picks the source, not you.** The portal dialog decides what's captured; a `Display` id from `enumerate_sources()` is informational only. Wayland lists displays (no windows) without a dialog.
+7. **macOS display sizes.** `DisplaySource` `width`/`height` are points, `scale_factor_milli` is a placeholder 1000, `is_primary` is always false (#23).
+8. **Logging.** pinray logs through `tracing`. `RUST_LOG=debug` only works if your app installs a subscriber, e.g. with `tracing-subscriber` (feature `env-filter`): `tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();`.
+9. **Mocks and custom backends.** Depend on `pinray-core`, implement `VideoBackend` / `AudioBackend` and a `BackendResolver`, then configure a `pinray_core::SessionBuilder::new()` with the usual setters and finish with `.build_with_resolver(&resolver)` instead of `.build()`. The crate-level docs on docs.rs/pinray-core show a complete audio-only mock (`AudioBackend` + resolver). A video mock has the same shape: implement `VideoBackend` with `next_event` returning `Ok(CaptureEvent::Video(frame))`, and return `BackendBundle { info, video: Some(Box::new(your_video_backend)), audio: None }` from your resolver. Useful for testing frame handling without a desktop. Backends must return `Timeout` on timeout and treat `Some(Duration::ZERO)` as a non-blocking poll.
 
-4. **`next_audio()` doesn't work on macOS.** ScreenCaptureKit delivers audio
-   through the video stream, so read it from `next_event` (issue #34).
+## Other known issues
 
-## Platform caveats (open issues)
+- If audio fails to start, `start()` leaves video running and `stop()` won't release it; drop the session (#33)
+- Audio queues are bounded: Linux and Windows drop the oldest packets, macOS drops new ones
 
-- Wayland ignores `crop_rect` (#30) and falls back to BGRA for unsupported
-  `pixel_format`s instead of erroring (#31). Cancelling the portal dialog
-  returns `Unsupported`, not a permission error (#29).
-- No backend reads the builder's `color_space`; trust `VideoFrame::color_space` (#32).
-- If audio fails to start, `start()` leaves video running and `stop()` won't
-  release it; drop the session (#33).
-- macOS `DisplaySource`: `width`/`height` are points, `scale_factor_milli` is
-  1000, `is_primary` is always false (#23). Crop output is upscaled (#22).
-- `frame_rate(None)`: uncapped on Wayland/DXGI/WGC, 30 fps on X11, 60 fps on
-  macOS. The builder default is `Some(60)`.
-- Audio queues are bounded: Linux and Windows drop the oldest packets, macOS
-  drops new ones.
+## Docs
 
-## MSRV / stability
+- [Getting started](https://raw.githubusercontent.com/Itz-Agasta/pinray/main/crates/pinray/docs/getting-started.md): install, first frames, sources, audio, tuning, writing frames to a video file
+- [Platform support](https://raw.githubusercontent.com/Itz-Agasta/pinray/main/docs/platforms.md): feature matrix and per-backend behavior
+- [Troubleshooting](https://raw.githubusercontent.com/Itz-Agasta/pinray/main/docs/troubleshooting.md): build errors and capture problems by platform
+- [API reference](https://docs.rs/pinray-core): every type and method, builds on any platform
 
-Rust 1.88 (let-chains). Crate is 0.2.x and pre-1.0: minor versions may break
-the API. Pin a minor version for stability.
+## Optional
+
+- [Changelog](https://raw.githubusercontent.com/Itz-Agasta/pinray/main/CHANGELOG.md): what changed per release
+- [Contributing](https://raw.githubusercontent.com/Itz-Agasta/pinray/main/CONTRIBUTING.md): workspace layout, CI checks, testing on real hardware
+- [Examples](https://github.com/Itz-Agasta/pinray/tree/main/crates/pinray/examples): runnable smoke tests per platform (`wayland_smoke`, `x11_smoke`, `audio_smoke`, `macos_smoke`, `windows_smoke`)
