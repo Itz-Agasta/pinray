@@ -6,10 +6,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Wayland lists displays without a portal dialog** ([#26], by @prushton2). `enumerate_sources()` on a Wayland session used to return only the system-audio source. It now lists every monitor from the compositor's `wl_output` globals, with fractional scale from `xdg-output` where available. The ids are informational: the ScreenCast portal can't be told which output to capture, so the user still picks it in the dialog. Windows aren't listed on Wayland.
+
+### Changed
+
+- The crates.io descriptions are more specific: `pinray` covers audio and names the native backends, and each sub-crate describes only what it contains.
+
 ### Documentation
 
 - Every public item now has doc comments with examples and `# Errors` sections ([#28], closes [#6]).
-- Fixed inaccurate platform docs (X11 default frame rate, audio drop policy, macOS `next_audio`), added `CONTRIBUTING.md`, `SECURITY.md`, and a bug report form, and the README examples are now compiled as doctests.
+- Fixed inaccurate platform docs (X11 default frame rate, audio drop policy, macOS `next_audio`), added `CONTRIBUTING.md`, `SECURITY.md`, and a bug report form, and the README examples are now compiled as doctests ([#35]).
 
 ## [0.2.7] - 2026-10-14
 
@@ -215,3 +223,5 @@ repository, so it is deliberately left undocumented here.
 [#21]: https://github.com/Itz-Agasta/pinray/pull/21
 [#6]: https://github.com/Itz-Agasta/pinray/issues/6
 [#28]: https://github.com/Itz-Agasta/pinray/pull/28
+[#35]: https://github.com/Itz-Agasta/pinray/pull/35
+[#26]: https://github.com/Itz-Agasta/pinray/pull/26

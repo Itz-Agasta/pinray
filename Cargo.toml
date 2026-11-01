@@ -9,7 +9,7 @@ members = [
 resolver = "3"
 
 [workspace.package]
-description = "Multi-platform screen capture library for Rust"
+description = "Cross-platform screen and system-audio capture for Rust: raw frames with timestamps, stride, and pixel format from native backends (PipeWire, X11, ScreenCaptureKit, DXGI/WGC, WASAPI)"
 edition = "2024"
 license = "MIT"
 readme = "README.md"
