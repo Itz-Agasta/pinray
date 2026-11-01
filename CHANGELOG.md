@@ -6,13 +6,19 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-11-02
+
+Windows audio now drops stale packets instead of fresh ones when you fall
+behind, and pinray is easier to find on crates.io. Thanks to @AndreIsraelAO
+for the Windows fix, their first contribution to pinray.
+
 ### Fixed
 
-- Windows system audio now drops the oldest queued packets when the consumer falls behind, as documented, instead of the newest.
+- **Windows system audio drops the oldest packets, not the newest** ([#38], fixes [#36], by @AndreIsraelAO). When you fell behind, WASAPI kept the stale packets and threw away fresh ones, so you heard old audio after catching up. It now matches Linux: the oldest queued packets are dropped first, and `sequence` jumps still show the gap.
 
 ### Changed
 
-- Better crates.io search metadata: the description mentions Wayland and screen recording, keywords now match what pinray does (`screenshot` removed until there's a screenshot API), and crates are listed in the specific video and audio categories, with each platform crate under its own OS API category.
+- Better crates.io search metadata ([#40]): the description mentions Wayland and screen recording, keywords now match what pinray does (`screenshot` removed until there's a screenshot API), and crates are listed in the specific video and audio categories, with each platform crate under its own OS API category.
 
 ## [0.2.8] - 2026-11-01
 
@@ -239,3 +245,6 @@ repository, so it is deliberately left undocumented here.
 [#28]: https://github.com/Itz-Agasta/pinray/pull/28
 [#35]: https://github.com/Itz-Agasta/pinray/pull/35
 [#26]: https://github.com/Itz-Agasta/pinray/pull/26
+[#36]: https://github.com/Itz-Agasta/pinray/issues/36
+[#38]: https://github.com/Itz-Agasta/pinray/pull/38
+[#40]: https://github.com/Itz-Agasta/pinray/pull/40

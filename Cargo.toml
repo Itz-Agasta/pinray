@@ -14,7 +14,7 @@ edition = "2024"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/Itz-Agasta/pinray"
-version = "0.2.8"
+version = "0.2.9"
 # let-chains (stabilized 1.88) are used throughout
 rust-version = "1.88"
 keywords = ["screen-capture", "screen-recording", "audio-capture", "wayland", "screencast"]
