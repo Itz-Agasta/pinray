@@ -1,3 +1,5 @@
+//! The capture session lifecycle and its builder.
+
 use std::time::Duration;
 
 use tracing::{debug, instrument};
@@ -10,6 +12,16 @@ use crate::{
     frame::{CaptureEvent, ColorSpace, PixelFormat, Rect},
 };
 
+/// A capture session bound to the backends a [`BackendResolver`] picked.
+///
+/// Lifecycle: build with [`SessionBuilder::build_with_resolver`], call
+/// [`start`](Self::start), read with [`next_event`](Self::next_event) or
+/// [`next_audio`](Self::next_audio), then [`stop`](Self::stop). `start` and
+/// `stop` are idempotent and a session can be restarted any number of
+/// times. Dropping the session releases the backends.
+///
+/// Applications using the `pinray` crate get the same API through
+/// `pinray::CaptureSession`, which picks the platform backend for you.
 pub struct CaptureSession {
     config: SessionConfig,
     backend_info: BackendInfo,
@@ -19,6 +31,10 @@ pub struct CaptureSession {
 }
 
 impl CaptureSession {
+    /// Wraps already-resolved backends in a session.
+    ///
+    /// Prefer [`SessionBuilder::build_with_resolver`], which validates
+    /// `config` first. The session starts stopped.
     pub fn new(config: SessionConfig, bundle: BackendBundle) -> Self {
         Self {
             config,
@@ -29,10 +45,13 @@ impl CaptureSession {
         }
     }
 
+    /// The configuration this session was built with.
     pub fn config(&self) -> &SessionConfig {
         &self.config
     }
 
+    /// Which backend was selected and what it supports. Include its
+    /// `Debug` output in bug reports.
     pub fn backend_info(&self) -> &BackendInfo {
         &self.backend_info
     }
@@ -47,10 +66,22 @@ impl CaptureSession {
             .and_then(|video| video.restore_token())
     }
 
+    /// Whether [`start`](Self::start) has been called without a matching
+    /// [`stop`](Self::stop).
     pub fn is_running(&self) -> bool {
         self.running
     }
 
+    /// Starts capturing. Does nothing if already running.
+    ///
+    /// Starts the video backend first, then audio.
+    ///
+    /// # Errors
+    ///
+    /// Returns the backend's error if either stream fails to start. If audio
+    /// fails after video started, video is left running and
+    /// [`stop`](Self::stop) won't release it (the session isn't marked as
+    /// running); drop the session instead.
     #[instrument(skip(self), fields(backend = ?self.backend_info.kind))]
     pub fn start(&mut self) -> Result<()> {
         if self.running {
@@ -70,6 +101,12 @@ impl CaptureSession {
         Ok(())
     }
 
+    /// Stops capturing. Does nothing if not running.
+    ///
+    /// # Errors
+    ///
+    /// Returns the backend's error if a stream fails to stop; the session
+    /// then still reports [`is_running`](Self::is_running) as `true`.
     #[instrument(skip(self), fields(backend = ?self.backend_info.kind))]
     pub fn stop(&mut self) -> Result<()> {
         if !self.running {
@@ -89,6 +126,21 @@ impl CaptureSession {
         Ok(())
     }
 
+    /// Waits up to `timeout` for the next video frame, audio packet, or gap.
+    ///
+    /// `None` blocks until an event arrives; `Some(Duration::ZERO)` polls
+    /// without blocking. In a session with both streams, pending audio is
+    /// returned before video so a busy video stream cannot starve it; in
+    /// that case the wait can last up to twice `timeout` (once for video,
+    /// once for audio).
+    ///
+    /// # Errors
+    ///
+    /// - [`PinrayError::Timeout`] if nothing arrived in time. The session is
+    ///   still healthy; call again.
+    /// - [`PinrayError::BackendNotSelected`] if the session has no backends.
+    /// - Any backend error, e.g. [`PinrayError::Platform`] if the capture
+    ///   source disappeared.
     pub fn next_event(&mut self, timeout: Option<Duration>) -> Result<CaptureEvent> {
         match (self.video_backend.as_mut(), self.audio_backend.as_mut()) {
             (Some(video), None) => video.next_event(timeout),
@@ -114,6 +166,17 @@ impl CaptureSession {
         }
     }
 
+    /// Waits up to `timeout` for the next audio packet, skipping video.
+    ///
+    /// Useful for audio-only sessions, or for draining audio on its own
+    /// thread of control. Same timeout semantics as
+    /// [`next_event`](Self::next_event).
+    ///
+    /// # Errors
+    ///
+    /// - [`PinrayError::BackendNotSelected`] if the session has no audio.
+    /// - [`PinrayError::Timeout`] if nothing arrived in time.
+    /// - Any backend error.
     pub fn next_audio(&mut self, timeout: Option<Duration>) -> Result<AudioFrame> {
         let audio = self
             .audio_backend
@@ -123,20 +186,41 @@ impl CaptureSession {
     }
 }
 
+/// Builds a [`SessionConfig`] and resolves it into a [`CaptureSession`].
+///
+/// Every setter takes and returns the builder by value, so calls chain.
+/// Nothing is validated until
+/// [`build_with_resolver`](Self::build_with_resolver).
+///
+/// # Examples
+///
+/// ```
+/// use pinray_core::{AudioCapture, CursorMode, SessionBuilder};
+///
+/// let builder = SessionBuilder::new()
+///     .audio(AudioCapture::SystemMix)
+///     .cursor_mode(CursorMode::Hidden)
+///     .queue_depth(4);
+/// assert!(builder.config().validate().is_ok());
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct SessionBuilder {
     config: SessionConfig,
 }
 
 impl SessionBuilder {
+    /// Creates a builder with [`SessionConfig::default`] settings.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// The configuration built so far.
     pub fn config(&self) -> &SessionConfig {
         &self.config
     }
 
+    /// Chooses the backend. Default: `Auto`. See
+    /// [`BackendPreference`](crate::BackendPreference) for what each one does.
     pub fn backend_preference(
         mut self,
         backend_preference: crate::backend::BackendPreference,
@@ -145,51 +229,98 @@ impl SessionBuilder {
         self
     }
 
+    /// Captures video from a display or window. Omit for audio-only.
     pub fn video_target(mut self, target: VideoCaptureTarget) -> Self {
         self.config.video_target = Some(target);
         self
     }
 
+    /// Also captures audio. Only [`AudioCapture::SystemMix`] is implemented.
     pub fn audio(mut self, audio_capture: AudioCapture) -> Self {
         self.config.audio_capture = Some(audio_capture);
         self
     }
 
+    /// Requests a pixel layout. Default: [`PixelFormat::Bgra8888`].
+    ///
+    /// BGRA is native on every backend; [`PixelFormat::Rgba8888`] costs a CPU
+    /// swizzle. Other formats are not reliably supported: Windows rejects
+    /// them with [`PinrayError::Unsupported`], and other backends may fall
+    /// back to BGRA. Always read the delivered
+    /// [`VideoFrame::pixel_format`](crate::VideoFrame::pixel_format).
     pub fn pixel_format(mut self, pixel_format: PixelFormat) -> Self {
         self.config.pixel_format = pixel_format;
         self
     }
 
+    /// Reuses a Wayland portal permission from a previous session, skipping
+    /// the dialog if the compositor still honors it.
+    ///
+    /// Get the token from `CaptureSession::restore_token` after building a
+    /// session, and persist it. Ignored by non-portal backends.
     pub fn restore_token(mut self, restore_token: impl Into<String>) -> Self {
         self.config.restore_token = Some(restore_token.into());
         self
     }
 
+    /// Records a color space preference. Default: `Some(ColorSpace::Srgb)`.
+    ///
+    /// Current backends do not act on this; read the delivered
+    /// [`VideoFrame::color_space`](crate::VideoFrame::color_space) instead.
     pub fn color_space(mut self, color_space: Option<ColorSpace>) -> Self {
         self.config.color_space = color_space;
         self
     }
 
+    /// Shows or hides the cursor in frames. Default: [`CursorMode::Embedded`].
     pub fn cursor_mode(mut self, cursor_mode: CursorMode) -> Self {
         self.config.cursor_mode = cursor_mode;
         self
     }
 
+    /// Captures only `crop_rect` of the source, or the whole source with
+    /// `None` (the default).
+    ///
+    /// Must have non-zero size, and backends reject rectangles outside the
+    /// source. The Wayland portal backend ignores it.
     pub fn crop_rect(mut self, crop_rect: Option<Rect>) -> Self {
         self.config.crop_rect = crop_rect;
         self
     }
 
+    /// Caps the frame rate. Default: `Some(60)`.
+    ///
+    /// This is a maximum, not a guarantee: damage-driven backends (Wayland,
+    /// DXGI, WGC) deliver frames only when the screen changes, so use
+    /// [`VideoFrame::stream_time_ns`](crate::VideoFrame::stream_time_ns) for
+    /// timing rather than counting frames. `None` means uncapped on Wayland, DXGI, and WGC; 30 fps on
+    /// X11 (polling); 60 fps on macOS. `Some(0)` fails validation.
     pub fn frame_rate(mut self, frame_rate: Option<u32>) -> Self {
         self.config.frame_rate = frame_rate;
         self
     }
 
+    /// Sets how many frames are buffered between the backend and your reads.
+    /// Default: `2`.
+    ///
+    /// When the queue is full, newly captured frames are dropped (visible as
+    /// [`VideoFrame::sequence`](crate::VideoFrame::sequence) jumps). Larger
+    /// values absorb hiccups at the cost of latency and memory. `0` fails
+    /// validation.
     pub fn queue_depth(mut self, queue_depth: u32) -> Self {
         self.config.queue_depth = queue_depth;
         self
     }
 
+    /// Validates the configuration and asks `resolver` for backends.
+    ///
+    /// The returned session is stopped; call [`CaptureSession::start`].
+    ///
+    /// # Errors
+    ///
+    /// - [`PinrayError::InvalidConfig`] if [`SessionConfig::validate`] fails.
+    /// - Whatever `resolver` returns, e.g. [`PinrayError::BackendUnavailable`]
+    ///   or [`PinrayError::Unsupported`].
     #[instrument(skip(self, resolver))]
     pub fn build_with_resolver<R>(self, resolver: &R) -> Result<CaptureSession>
     where

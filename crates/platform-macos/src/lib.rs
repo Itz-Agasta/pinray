@@ -1,3 +1,10 @@
+//! macOS capture backend: ScreenCaptureKit (macOS 13.0+) for display,
+//! window, and system-audio capture.
+//!
+//! This is an implementation crate for [pinray](https://docs.rs/pinray);
+//! depend on `pinray` instead.
+#![warn(missing_docs)]
+
 #[cfg(target_os = "macos")]
 mod capture;
 #[cfg(target_os = "macos")]
@@ -28,6 +35,7 @@ fn os_supported() -> bool {
     false
 }
 
+/// Lists the ScreenCaptureKit backends with their capabilities; empty on other OSes and before macOS 13.0.
 pub fn available_backends() -> Vec<BackendInfo> {
     if os_supported() {
         vec![BackendInfo {
@@ -41,6 +49,12 @@ pub fn available_backends() -> Vec<BackendInfo> {
     }
 }
 
+/// Enumerates ScreenCaptureKit capture sources; empty on other OSes.
+///
+/// # Errors
+///
+/// Returns [`pinray_core::PinrayError::Platform`] if the OS enumeration API fails or
+/// screen-recording permission is denied. Triggers the permission check.
 pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     if !cfg!(target_os = "macos") {
         return Ok(Vec::new());
@@ -56,6 +70,21 @@ pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     unreachable!()
 }
 
+/// Picks ScreenCaptureKit backends for `config`, or `Ok(None)` if this crate does not
+/// handle the requested [`pinray_core::BackendPreference`] (or this isn't macOS).
+///
+/// Called by `pinray`'s platform resolver; applications should use
+/// `pinray::CaptureSession::builder` instead.
+///
+/// # Errors
+///
+/// - [`pinray_core::PinrayError::BackendUnavailable`] on macOS older than 13.0.
+/// - [`pinray_core::PinrayError::Platform`] if screen-recording permission
+///   is denied, the requested source doesn't exist, or ScreenCaptureKit
+///   fails.
+/// - [`pinray_core::PinrayError::Unsupported`] for microphone capture.
+/// - [`pinray_core::PinrayError::InvalidConfig`] if the source id is
+///   malformed.
 pub fn try_resolve(config: &SessionConfig) -> Result<Option<BackendBundle>> {
     if !cfg!(target_os = "macos") {
         return Ok(None);

@@ -1,3 +1,5 @@
+//! Session configuration: what to capture and how.
+
 use crate::{
     error::{PinrayError, Result},
     frame::{ColorSpace, PixelFormat, Rect},
@@ -7,7 +9,10 @@ use crate::{
 /// Whether the pointer is drawn into captured frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CursorMode {
+    /// Draw the cursor into each frame (the default). DXGI cannot do this;
+    /// check [`BackendInfo::notes`](crate::BackendInfo::notes).
     Embedded,
+    /// Leave the cursor out of frames.
     Hidden,
 }
 
@@ -15,7 +20,10 @@ pub enum CursorMode {
 /// `SourceId::new("auto")` for the primary display.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VideoCaptureTarget {
+    /// A whole monitor. On Wayland the id is not enforced: the user picks
+    /// the output in the portal dialog.
     Display(SourceId),
+    /// A single application window.
     Window(SourceId),
 }
 
@@ -24,22 +32,40 @@ pub enum VideoCaptureTarget {
 pub enum AudioCapture {
     /// Everything the system plays (loopback / sink monitor).
     SystemMix,
-    /// A microphone device (not implemented by any backend yet).
+    /// A microphone device. No backend implements this yet; building a
+    /// session with it fails with
+    /// [`PinrayError::Unsupported`].
     Microphone(SourceId),
 }
 
 /// Validated session configuration; construct through the session builder.
+///
+/// Each field has a builder method of the same name on
+/// [`SessionBuilder`](crate::SessionBuilder), which documents it in detail.
+/// The exception is `audio_capture`, set with
+/// [`SessionBuilder::audio`](crate::SessionBuilder::audio).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionConfig {
+    /// Which backend to use. Default: [`BackendPreference::Auto`](crate::BackendPreference::Auto).
     pub backend_preference: crate::backend::BackendPreference,
+    /// Video source, or `None` for an audio-only session. Default: `None`.
     pub video_target: Option<VideoCaptureTarget>,
+    /// Audio source, or `None` for a video-only session. Default: `None`.
     pub audio_capture: Option<AudioCapture>,
+    /// Wayland portal restore token from a previous session. Default: `None`.
     pub restore_token: Option<String>,
+    /// Requested pixel layout of video frames. Default: [`PixelFormat::Bgra8888`].
     pub pixel_format: PixelFormat,
+    /// Requested color space hint. Default: `Some(ColorSpace::Srgb)`.
     pub color_space: Option<ColorSpace>,
+    /// Whether to draw the cursor. Default: [`CursorMode::Embedded`].
     pub cursor_mode: CursorMode,
+    /// Capture only this region of the source. Default: `None` (whole source).
     pub crop_rect: Option<Rect>,
+    /// Maximum frames per second, or `None` for the backend default.
+    /// Default: `Some(60)`.
     pub frame_rate: Option<u32>,
+    /// Frames buffered before new frames are dropped. Default: `2`.
     pub queue_depth: u32,
 }
 
@@ -61,6 +87,32 @@ impl Default for SessionConfig {
 }
 
 impl SessionConfig {
+    /// Checks the configuration for mistakes that no backend could accept.
+    ///
+    /// Called automatically when a session is built. Backend-specific limits
+    /// (e.g. a crop rectangle larger than the display) are checked later, by
+    /// the backend.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PinrayError::InvalidConfig`] if:
+    ///
+    /// - neither `video_target` nor `audio_capture` is set,
+    /// - `frame_rate` is `Some(0)`,
+    /// - `queue_depth` is `0`, or
+    /// - `crop_rect` has zero width or height.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pinray_core::{AudioCapture, SessionConfig};
+    ///
+    /// let mut config = SessionConfig::default();
+    /// assert!(config.validate().is_err()); // nothing to capture
+    ///
+    /// config.audio_capture = Some(AudioCapture::SystemMix);
+    /// assert!(config.validate().is_ok());
+    /// ```
     pub fn validate(&self) -> Result<()> {
         if self.video_target.is_none() && self.audio_capture.is_none() {
             return Err(PinrayError::InvalidConfig(

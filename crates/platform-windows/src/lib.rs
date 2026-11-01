@@ -7,6 +7,10 @@
 //! - Explicit `WindowsDxgi` / `WindowsWgc` preferences are honored as-is.
 //! - `AudioCapture::SystemMix` pairs a WASAPI loopback backend with either
 //!   video backend, or runs standalone for audio-only sessions.
+//!
+//! This is an implementation crate for [pinray](https://docs.rs/pinray);
+//! depend on `pinray` instead.
+#![warn(missing_docs)]
 
 #[cfg(target_os = "windows")]
 mod d3d;
@@ -23,6 +27,7 @@ use pinray_core::{
     BackendBundle, BackendInfo, BackendPreference, CaptureSource, Result, SessionConfig,
 };
 
+/// Lists the DXGI, WGC, and WASAPI backends with their capabilities; empty on other OSes.
 pub fn available_backends() -> Vec<BackendInfo> {
     #[cfg(target_os = "windows")]
     {
@@ -37,6 +42,11 @@ pub fn available_backends() -> Vec<BackendInfo> {
     Vec::new()
 }
 
+/// Enumerates Windows display, window, and audio capture sources; empty on other OSes.
+///
+/// # Errors
+///
+/// Returns [`pinray_core::PinrayError::Platform`] if the OS enumeration API fails.
 pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     #[cfg(target_os = "windows")]
     {
@@ -47,6 +57,23 @@ pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     Ok(Vec::new())
 }
 
+/// Picks Windows backends for `config`, or `Ok(None)` if this crate does not
+/// handle the requested [`pinray_core::BackendPreference`] (or this isn't Windows).
+///
+/// Called by `pinray`'s platform resolver; applications should use
+/// `pinray::CaptureSession::builder` instead.
+///
+/// # Errors
+///
+/// - [`pinray_core::PinrayError::InvalidConfig`] if neither video nor audio
+///   is set, or `crop_rect` has a negative offset. A crop larger than the
+///   source isn't caught here: DXGI fails when the frame is captured, and
+///   WGC logs and skips the frame.
+/// - [`pinray_core::PinrayError::Unsupported`] for pixel formats other than
+///   `Bgra8888`/`Rgba8888`, microphone capture, or a window target with
+///   `WindowsDxgi`.
+/// - Other variants if the source is missing or DXGI/WGC/WASAPI fail to
+///   open.
 pub fn try_resolve(config: &SessionConfig) -> Result<Option<BackendBundle>> {
     let applies = matches!(
         config.backend_preference,
