@@ -6,6 +6,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Better crates.io search metadata: the description mentions Wayland and screen recording, keywords now match what pinray does (`screenshot` removed until there's a screenshot API), and each crate is listed in its specific video, audio, and OS API categories.
+
 ## [0.2.8] - 2026-11-01
 
 Wayland now lists displays without opening the portal dialog, thanks to

@@ -5,8 +5,8 @@ edition.workspace = true
 license.workspace = true
 description = "Windows backends for pinray: DXGI Desktop Duplication, Windows Graphics Capture, and WASAPI loopback audio"
 repository.workspace = true
-keywords.workspace = true
-categories.workspace = true
+keywords = ["screen-capture", "dxgi", "wasapi", "windows", "audio-capture"]
+categories = ["os::windows-apis", "multimedia::video", "multimedia::audio"]
 rust-version.workspace = true
 
 # Build docs for the real Windows implementation (the windows crate is pure
