@@ -6,6 +6,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Wayland lists displays without a portal dialog** ([#26], by @prushton2). `enumerate_sources()` on a Wayland session used to return only the system-audio source. It now lists every monitor from the compositor's `wl_output` globals, with fractional scale from `xdg-output` where available. The ids are informational: the ScreenCast portal can't be told which output to capture, so the user still picks it in the dialog. Windows aren't listed on Wayland.
+
 ### Changed
 
 - The crates.io description now covers audio and names the native backends.
@@ -220,3 +224,4 @@ repository, so it is deliberately left undocumented here.
 [#6]: https://github.com/Itz-Agasta/pinray/issues/6
 [#28]: https://github.com/Itz-Agasta/pinray/pull/28
 [#35]: https://github.com/Itz-Agasta/pinray/pull/35
+[#26]: https://github.com/Itz-Agasta/pinray/pull/26
