@@ -5,8 +5,8 @@ edition.workspace = true
 license.workspace = true
 description = "Frame model, session builder, and backend traits behind pinray, the cross-platform screen and audio capture crate. No native dependencies"
 repository.workspace = true
-keywords.workspace = true
-categories.workspace = true
+keywords = ["screen-capture", "screen-recording", "audio-capture", "screencast", "video-frame"]
+categories = ["multimedia::video", "multimedia::audio"]
 rust-version.workspace = true
 
 [dependencies]
