@@ -88,7 +88,7 @@ Frames skipped by pacing aren't reported as `Gap` events, because you asked for 
 
 ### Audio
 
-WASAPI captures the default output device in shared-mode loopback. The format follows the device mix, usually 48 kHz stereo `F32`. It pairs with either video backend or runs on its own. When the queue is full, new packets are dropped.
+WASAPI captures the default output device in shared-mode loopback. The format follows the device mix, usually 48 kHz stereo `F32`. It pairs with either video backend or runs on its own. When you fall behind, the oldest queued packets are dropped first.
 
 Video and audio timestamps both come from the performance counter (QPC), anchored to boot.
 

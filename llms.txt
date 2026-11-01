@@ -187,8 +187,8 @@ Config defaults (`SessionConfig::default()`): `backend_preference: Auto`,
   1000, `is_primary` is always false (#23). Crop output is upscaled (#22).
 - `frame_rate(None)`: uncapped on Wayland/DXGI/WGC, 30 fps on X11, 60 fps on
   macOS. The builder default is `Some(60)`.
-- Audio queues are bounded: Linux drops the oldest packets, Windows and macOS
-  drop new ones.
+- Audio queues are bounded: Linux and Windows drop the oldest packets, macOS
+  drops new ones.
 
 ## MSRV / stability
 

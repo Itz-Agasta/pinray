@@ -6,6 +6,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows system audio now drops the oldest queued packets when the consumer falls behind, as documented, instead of the newest.
+
 ### Changed
 
 - Better crates.io search metadata: the description mentions Wayland and screen recording, keywords now match what pinray does (`screenshot` removed until there's a screenshot API), and crates are listed in the specific video and audio categories, with each platform crate under its own OS API category.

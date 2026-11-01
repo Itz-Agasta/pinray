@@ -7,9 +7,9 @@
 //! falls behind, the oldest unread packets are dropped.
 
 use std::collections::VecDeque;
-use std::sync::{Arc, Condvar, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{SyncSender, sync_channel};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -32,8 +32,9 @@ use windows::Win32::System::Com::{
 
 use crate::d3d::win_err;
 
-/// How many audio packets (~10 ms each) the channel buffers before dropping.
+/// How many audio packets (~10 ms each) the queue buffers before evicting the oldest.
 const AUDIO_CHANNEL_CAPACITY: usize = 64;
+const POLL_INTERVAL: Duration = Duration::from_millis(4);
 
 /// Bounded frame queue that evicts the oldest frame when full, so a slow
 /// consumer catches up on the most recent audio.
@@ -68,7 +69,10 @@ impl AudioQueue {
     }
 
     fn close(&self) {
-        self.state.lock().unwrap().closed = true;
+        self.state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .closed = true;
         self.ready.notify_all();
     }
 
@@ -96,7 +100,16 @@ impl AudioQueue {
         }
     }
 }
-const POLL_INTERVAL: Duration = Duration::from_millis(4);
+
+/// Closes the queue when the capture thread exits, including by panic, so a
+/// blocked consumer wakes up.
+struct CloseOnDrop<'a>(&'a AudioQueue);
+
+impl Drop for CloseOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.close();
+    }
+}
 
 struct MixFormat {
     sample_rate: u32,
@@ -299,8 +312,8 @@ impl AudioBackend for WasapiAudioBackend {
             .name("pinray-wasapi".into())
             .spawn(move || {
                 let com = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+                let _close = CloseOnDrop(&thread_queue);
                 capture_loop(&thread_stop, &thread_queue, &init_tx);
-                thread_queue.close();
                 if com.is_ok() {
                     unsafe { CoUninitialize() };
                 }
@@ -345,7 +358,9 @@ impl AudioBackend for WasapiAudioBackend {
         match queue.pop(timeout) {
             Ok(Some(frame)) => Ok(frame),
             Ok(None) => Err(PinrayError::Timeout(timeout.unwrap_or_default())),
-            Err(()) => Err(PinrayError::Platform("wasapi capture thread terminated".into())),
+            Err(()) => Err(PinrayError::Platform(
+                "wasapi capture thread terminated".into(),
+            )),
         }
     }
 }
