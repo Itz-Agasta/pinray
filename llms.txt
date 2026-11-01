@@ -74,7 +74,7 @@ Audio only: skip `.video_target` and read with `session.next_audio(timeout)` on 
 `CaptureSession` methods:
 
 - `.start() -> Result<(), PinrayError>` / `.stop() -> Result<(), PinrayError>`: idempotent; a session can be restarted. Call `stop()` when done
-- `.next_event(Option<Duration>) -> Result<CaptureEvent, PinrayError>`: next video frame, audio packet, or gap. `None` blocks forever; `Some(Duration::ZERO)` polls without blocking. With video + audio, pending audio comes first and one call can wait up to 2x the timeout
+- `.next_event(Option<Duration>) -> Result<CaptureEvent, PinrayError>`: next video frame, audio packet, or gap. `None` blocks forever; `Some(Duration::ZERO)` polls without blocking. On Linux and Windows, where video and audio are separate backends, pending audio comes first and one call can wait up to 2x the timeout. On macOS both arrive from one ScreenCaptureKit stream with a single timeout
 - `.next_audio(Option<Duration>) -> Result<AudioFrame, PinrayError>`: audio only (not on macOS, see above)
 - `.backend_info() -> &BackendInfo`: which backend was picked; log it, it differs per machine
 - `.restore_token() -> Option<String>`: Wayland token to persist for next run; `None` elsewhere
@@ -183,8 +183,8 @@ All of these are re-exported at the crate root (`pinray::VideoFrame`, etc.). `Se
 5. **Threading.** `CaptureSession` is `Send` but not `Sync`: move it into one capture thread and send frames out over a channel. Both read methods take `&mut self`, so one thread owns all reads.
 6. **Wayland picks the source, not you.** The portal dialog decides what's captured; a `Display` id from `enumerate_sources()` is informational only. Wayland lists displays (no windows) without a dialog.
 7. **macOS display sizes.** `DisplaySource` `width`/`height` are points, `scale_factor_milli` is a placeholder 1000, `is_primary` is always false (#23).
-8. **Logging.** pinray logs through `tracing`. `RUST_LOG=debug` only works if your app installs a subscriber (e.g. `tracing_subscriber::fmt().with_env_filter(...)`).
-9. **Mocks and custom backends.** Depend on `pinray-core`, implement `VideoBackend` / `AudioBackend` and a `BackendResolver`, then `pinray_core::SessionBuilder::new()....build_with_resolver(&resolver)`. Useful for testing frame handling without a desktop. Backends must return `Timeout` on timeout and treat `Some(Duration::ZERO)` as a non-blocking poll.
+8. **Logging.** pinray logs through `tracing`. `RUST_LOG=debug` only works if your app installs a subscriber, e.g. with `tracing-subscriber` (feature `env-filter`): `tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();`.
+9. **Mocks and custom backends.** Depend on `pinray-core`, implement `VideoBackend` / `AudioBackend` and a `BackendResolver`, then configure a `pinray_core::SessionBuilder::new()` with the usual setters and finish with `.build_with_resolver(&resolver)` instead of `.build()`. The crate-level docs on docs.rs/pinray-core have a complete mock backend. Useful for testing frame handling without a desktop. Backends must return `Timeout` on timeout and treat `Some(Duration::ZERO)` as a non-blocking poll.
 
 ## Other known issues
 
