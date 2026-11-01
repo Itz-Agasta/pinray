@@ -6,6 +6,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-11-01
+
+Wayland now lists displays without opening the portal dialog, thanks to
+@prushton2. The rest is documentation: every public item is documented, and
+the platform docs now match what each backend actually does.
+
 ### Added
 
 - **Wayland lists displays without a portal dialog** ([#26], by @prushton2). `enumerate_sources()` on a Wayland session used to return only the system-audio source. It now lists every monitor from the compositor's `wl_output` globals, with fractional scale from `xdg-output` where available. The ids are informational: the ScreenCast portal can't be told which output to capture, so the user still picks it in the dialog. Windows aren't listed on Wayland.
