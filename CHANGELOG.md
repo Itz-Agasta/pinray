@@ -12,7 +12,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- The crates.io description now covers audio and names the native backends.
+- The crates.io descriptions are more specific: `pinray` covers audio and names the native backends, and each sub-crate describes only what it contains.
 
 ### Documentation
 
