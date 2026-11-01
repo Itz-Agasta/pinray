@@ -3,14 +3,15 @@
 //! A dedicated capture thread opens the default render endpoint in shared
 //! loopback mode and drains packets in a polling loop (event-driven buffering
 //! is unreliable for loopback pins across Windows versions). Frames are
-//! pushed into a bounded channel; `next_audio` drains it. If the consumer
+//! pushed into a bounded queue; `next_audio` drains it. If the consumer
 //! falls behind, the oldest unread packets are dropped.
 
-use std::sync::Arc;
+use std::collections::VecDeque;
+use std::sync::{Arc, Condvar, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
+use std::sync::mpsc::{SyncSender, sync_channel};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use pinray_core::{
     AudioBackend, AudioData, AudioFrame, BackendInfo, BackendKind, PinrayError, Result,
@@ -33,6 +34,67 @@ use crate::d3d::win_err;
 
 /// How many audio packets (~10 ms each) the channel buffers before dropping.
 const AUDIO_CHANNEL_CAPACITY: usize = 64;
+
+/// Bounded frame queue that evicts the oldest frame when full, so a slow
+/// consumer catches up on the most recent audio.
+struct AudioQueue {
+    state: Mutex<QueueState>,
+    ready: Condvar,
+}
+
+struct QueueState {
+    frames: VecDeque<AudioFrame>,
+    closed: bool,
+}
+
+impl AudioQueue {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(QueueState {
+                frames: VecDeque::with_capacity(AUDIO_CHANNEL_CAPACITY),
+                closed: false,
+            }),
+            ready: Condvar::new(),
+        }
+    }
+
+    fn push(&self, frame: AudioFrame) {
+        let mut state = self.state.lock().unwrap();
+        if state.frames.len() >= AUDIO_CHANNEL_CAPACITY {
+            state.frames.pop_front();
+        }
+        state.frames.push_back(frame);
+        self.ready.notify_one();
+    }
+
+    fn close(&self) {
+        self.state.lock().unwrap().closed = true;
+        self.ready.notify_all();
+    }
+
+    /// `Ok(None)` on timeout, `Err(())` once closed and drained.
+    fn pop(&self, timeout: Option<Duration>) -> std::result::Result<Option<AudioFrame>, ()> {
+        let deadline = timeout.map(|t| Instant::now() + t);
+        let mut state = self.state.lock().unwrap();
+        loop {
+            if let Some(frame) = state.frames.pop_front() {
+                return Ok(Some(frame));
+            }
+            if state.closed {
+                return Err(());
+            }
+            state = match deadline {
+                None => self.ready.wait(state).unwrap(),
+                Some(deadline) => {
+                    let Some(left) = deadline.checked_duration_since(Instant::now()) else {
+                        return Ok(None);
+                    };
+                    self.ready.wait_timeout(state, left).unwrap().0
+                }
+            };
+        }
+    }
+}
 const POLL_INTERVAL: Duration = Duration::from_millis(4);
 
 struct MixFormat {
@@ -84,7 +146,7 @@ fn parse_mix_format(format: &WAVEFORMATEX) -> Result<MixFormat> {
     })
 }
 
-fn capture_loop(stop: &AtomicBool, tx: &SyncSender<AudioFrame>, init_tx: &SyncSender<Result<()>>) {
+fn capture_loop(stop: &AtomicBool, queue: &AudioQueue, init_tx: &SyncSender<Result<()>>) {
     let mut initialized = false;
     let result = (|| -> Result<()> {
         let enumerator: IMMDeviceEnumerator =
@@ -175,8 +237,8 @@ fn capture_loop(stop: &AtomicBool, tx: &SyncSender<AudioFrame>, init_tx: &SyncSe
                 };
                 sequence += 1;
 
-                // If the consumer is behind, drop the packet.
-                let _ = tx.try_send(frame);
+                // If the consumer is behind, the queue evicts its oldest frame.
+                queue.push(frame);
             }
         }
 
@@ -195,14 +257,14 @@ fn capture_loop(stop: &AtomicBool, tx: &SyncSender<AudioFrame>, init_tx: &SyncSe
 
 pub(crate) struct WasapiAudioBackend {
     worker: Option<(JoinHandle<()>, Arc<AtomicBool>)>,
-    rx: Option<Receiver<AudioFrame>>,
+    queue: Option<Arc<AudioQueue>>,
 }
 
 impl WasapiAudioBackend {
     pub(crate) fn new() -> Self {
         Self {
             worker: None,
-            rx: None,
+            queue: None,
         }
     }
 
@@ -227,15 +289,17 @@ impl AudioBackend for WasapiAudioBackend {
         }
 
         let stop = Arc::new(AtomicBool::new(false));
-        let (tx, rx) = sync_channel::<AudioFrame>(AUDIO_CHANNEL_CAPACITY);
+        let queue = Arc::new(AudioQueue::new());
         let (init_tx, init_rx) = sync_channel::<Result<()>>(1);
 
         let thread_stop = Arc::clone(&stop);
+        let thread_queue = Arc::clone(&queue);
         let handle = std::thread::Builder::new()
             .name("pinray-wasapi".into())
             .spawn(move || {
                 let com = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
-                capture_loop(&thread_stop, &tx, &init_tx);
+                capture_loop(&thread_stop, &thread_queue, &init_tx);
+                thread_queue.close();
                 if com.is_ok() {
                     unsafe { CoUninitialize() };
                 }
@@ -245,7 +309,7 @@ impl AudioBackend for WasapiAudioBackend {
         match init_rx.recv_timeout(Duration::from_secs(5)) {
             Ok(Ok(())) => {
                 self.worker = Some((handle, stop));
-                self.rx = Some(rx);
+                self.queue = Some(queue);
                 Ok(())
             }
             Ok(Err(error)) => {
@@ -267,26 +331,20 @@ impl AudioBackend for WasapiAudioBackend {
             stop.store(true, Ordering::Relaxed);
             let _ = handle.join();
         }
-        self.rx = None;
+        self.queue = None;
         Ok(())
     }
 
     fn next_audio(&mut self, timeout: Option<Duration>) -> Result<AudioFrame> {
-        let rx = self
-            .rx
+        let queue = self
+            .queue
             .as_ref()
             .ok_or_else(|| PinrayError::Platform("wasapi backend not started".into()))?;
 
-        match timeout {
-            Some(timeout) => rx.recv_timeout(timeout).map_err(|error| match error {
-                RecvTimeoutError::Timeout => PinrayError::Timeout(timeout),
-                RecvTimeoutError::Disconnected => {
-                    PinrayError::Platform("wasapi capture thread terminated".into())
-                }
-            }),
-            None => rx
-                .recv()
-                .map_err(|_| PinrayError::Platform("wasapi capture thread terminated".into())),
+        match queue.pop(timeout) {
+            Ok(Some(frame)) => Ok(frame),
+            Ok(None) => Err(PinrayError::Timeout(timeout.unwrap_or_default())),
+            Err(()) => Err(PinrayError::Platform("wasapi capture thread terminated".into())),
         }
     }
 }
@@ -342,5 +400,23 @@ mod tests {
         let fmt = &ext as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX;
         let mix = parse_mix_format(unsafe { &*fmt }).unwrap();
         assert_eq!(mix.sample_format, SampleFormat::F32);
+    }
+
+    #[test]
+    fn queue_drops_oldest_when_full() {
+        let queue = AudioQueue::new();
+        for sequence in 0..(AUDIO_CHANNEL_CAPACITY as u64 + 3) {
+            queue.push(AudioFrame {
+                stream_time_ns: 0,
+                sequence,
+                sample_rate: 48_000,
+                channels: 2,
+                sample_format: SampleFormat::F32,
+                data: AudioData::Interleaved(Vec::new()),
+            });
+        }
+        queue.close();
+        assert_eq!(queue.pop(None).unwrap().unwrap().sequence, 3);
+        assert!(queue.pop(Some(Duration::ZERO)).is_ok());
     }
 }
