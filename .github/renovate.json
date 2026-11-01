@@ -1,0 +1,35 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":configMigration",
+    ":maintainLockFilesWeekly",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "labels": ["dependencies"],
+  "osvVulnerabilityAlerts": true,
+  "dependencyDashboardOSVVulnerabilitySummary": "unresolved",
+  "vulnerabilityAlerts": {
+    "labels": ["security"]
+  },
+  "packageRules": [
+    {
+      "description": "Workspace crates are versioned by the release process",
+      "matchPackageNames": ["pinray", "pinray-*"],
+      "enabled": false
+    },
+    {
+      "groupName": "objc2 crates",
+      "matchPackageNames": ["objc2", "objc2-*", "block2", "dispatch2"]
+    },
+    {
+      "groupName": "wayland-rs crates",
+      "matchPackageNames": ["wayland-*"]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": ["github-actions"]
+    }
+  ]
+}
