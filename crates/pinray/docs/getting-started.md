@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```rust,no_run
 use pinray::{CaptureSource, CaptureSession, VideoCaptureTarget};
 
-let sources = pinray::enumerate_sources().unwrap();
+let sources = pinray::enumerate_sources()?;
 let window = sources.iter().find_map(|s| match s {
     CaptureSource::Window(w) if w.title.contains("Firefox") => Some(w.id.clone()),
     _ => None,
@@ -55,8 +55,9 @@ let window = sources.iter().find_map(|s| match s {
 if let Some(id) = window {
     let session = CaptureSession::builder()
         .video_target(VideoCaptureTarget::Window(id))
-        .build();
+        .build()?;
 }
+# Ok::<(), pinray::PinrayError>(())
 ```
 
 Window ids die with the window - enumerate right before building the session.
@@ -64,15 +65,14 @@ Window ids die with the window - enumerate right before building the session.
 ## Add system audio
 
 ```rust,no_run
-use std::time::Duration;
 use pinray::{AudioCapture, CaptureSession, SourceId, VideoCaptureTarget};
 
 let mut session = CaptureSession::builder()
     .video_target(VideoCaptureTarget::Display(SourceId::new("auto")))
     .audio(AudioCapture::SystemMix)
-    .build()
-    .unwrap();
-session.start().unwrap();
+    .build()?;
+session.start()?;
+# Ok::<(), pinray::PinrayError>(())
 ```
 
 Audio arrives as `CaptureEvent::Audio` interleaved with video from `next_event`, or drain it directly with `session.next_audio(timeout)`.
@@ -117,9 +117,10 @@ let builder = CaptureSession::builder()
 Check what you actually got:
 
 ```rust,no_run
-# let session = pinray::CaptureSession::builder().audio(pinray::AudioCapture::SystemMix).build().unwrap();
+# let session = pinray::CaptureSession::builder().audio(pinray::AudioCapture::SystemMix).build()?;
 let info = session.backend_info();
 println!("{:?}: audio={} notes={}", info.kind, info.supports_audio, info.notes);
+# Ok::<(), pinray::PinrayError>(())
 ```
 
 Include that output in bug reports - backend selection differs per machine.

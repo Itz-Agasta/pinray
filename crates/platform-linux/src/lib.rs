@@ -9,6 +9,10 @@
 //!   for explicitly.
 //! - `AudioCapture::SystemMix` uses PipeWire regardless of session type, so
 //!   audio-only sessions never need a portal dialog or an X server.
+//!
+//! This is an implementation crate for [pinray](https://docs.rs/pinray);
+//! depend on `pinray` instead.
+#![warn(missing_docs)]
 
 #[cfg(target_os = "linux")]
 mod audio;
@@ -25,8 +29,10 @@ mod x11;
 use pinray_core::{AudioDeviceSource, BackendKind, BackendPreference, PinrayError, SourceId};
 use pinray_core::{BackendBundle, BackendInfo, CaptureSource, Result, SessionConfig};
 
+/// Source id ([`pinray_core::SourceId`]) of the PipeWire system-mix audio source.
 pub const SYSTEM_AUDIO_ID: &str = "audio:system-mix";
 
+/// Lists the Linux backends with their capabilities; empty on other OSes.
 pub fn available_backends() -> Vec<BackendInfo> {
     #[cfg(target_os = "linux")]
     {
@@ -60,12 +66,18 @@ pub fn available_backends() -> Vec<BackendInfo> {
 /// - Otherwise, with a reachable `DISPLAY`: displays (RandR monitors) and
 ///   windows (EWMH `_NET_CLIENT_LIST`) via X11.
 ///
-/// The PipeWire system-audio source is always appended.
+/// The PipeWire system-audio source is always appended. Returns an empty
+/// list on other OSes.
 ///
 /// On Wayland the returned display IDs are informational only: the
 /// ScreenCast portal has no way to request a specific output, so the user
 /// still picks what to capture in the portal dialog at session build, and a
 /// `VideoCaptureTarget::Display` ID is not enforced.
+///
+/// # Errors
+///
+/// Never fails today: Wayland and X11 enumeration errors are logged and
+/// skipped, so you get at least the system-audio source.
 pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     #[cfg(target_os = "linux")]
     {
@@ -101,6 +113,16 @@ pub fn enumerate_sources() -> Result<Vec<CaptureSource>> {
     Ok(Vec::new())
 }
 
+/// Picks Linux backends for `config`, or `Ok(None)` if this crate does not
+/// handle the requested [`pinray_core::BackendPreference`] (or this isn't Linux).
+///
+/// Called by `pinray`'s platform resolver; applications should use
+/// `pinray::CaptureSession::builder` instead.
+///
+/// # Errors
+///
+/// Returns an error if a matching backend fails to open: the source is
+/// missing, the user denies permission, or an option is unsupported.
 pub fn try_resolve(config: &SessionConfig) -> Result<Option<BackendBundle>> {
     #[cfg(not(target_os = "linux"))]
     {
