@@ -24,7 +24,7 @@ tracing.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 pipewire = "0.10.0"
 serde = { version = "1.0", features = ["derive"] }
-x11rb = { version = "0.13", features = ["randr", "xfixes"] }
+x11rb = { version = "0.14", features = ["randr", "xfixes"] }
 zbus = { version = "5.15", default-features = true }
 wayland-client = { version = "0.31.15" }
 wayland-protocols = { version = "0.32", features = ["client", "unstable"] }
