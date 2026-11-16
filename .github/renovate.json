@@ -9,7 +9,9 @@
   ],
   "labels": ["dependencies"],
   "osvVulnerabilityAlerts": true,
-  "dependencyDashboardOSVVulnerabilitySummary": "unresolved",
+  "dependencyDashboard": {
+    "osvVulnerabilitySummary": "unresolved"
+  },
   "vulnerabilityAlerts": {
     "labels": ["security"]
   },
